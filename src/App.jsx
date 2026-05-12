@@ -64,6 +64,7 @@ export default function App() {
   const [currentProf, setCurrentProf] = useState(null);
   const [detailModalidad, setDetailModalidad] = useState("");
   const [showReviewModal, setShowReviewModal] = useState(false);
+  const [editingReview, setEditingReview] = useState(null);
   const [showAddProfModal, setShowAddProfModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState("login");
@@ -76,7 +77,6 @@ export default function App() {
   const [revText, setRevText] = useState("");
   const [revMateria, setRevMateria] = useState("");
   const [revModalidad, setRevModalidad] = useState("Presencial");
-  const [revAsGuest, setRevAsGuest] = useState(false);
   const [guestEmail, setGuestEmail] = useState("");
   const [newNombre, setNewNombre] = useState("");
   const [newDept, setNewDept] = useState("");
@@ -129,9 +129,7 @@ export default function App() {
     setAuthLoading(false);
   }
 
-  async function handleLogout() {
-    await supabase.auth.signOut();
-  }
+  async function handleLogout() { await supabase.auth.signOut(); }
 
   function getFiltered() {
     const q = search.toLowerCase();
@@ -152,29 +150,64 @@ export default function App() {
 
   const depts = [...new Set(profesores.map((p) => p.departamento))].sort();
 
+  function openReview(prof, reviewToEdit = null) {
+    setCurrentProf(prof);
+    setEditingReview(reviewToEdit);
+    if (reviewToEdit) {
+      setRevMateria(reviewToEdit.materia);
+      setRevModalidad(reviewToEdit.modalidad || "Presencial");
+      setSelectedStar(reviewToEdit.rating);
+      setSelectedTags(reviewToEdit.tags || []);
+      setRevText(reviewToEdit.texto);
+    } else {
+      setRevMateria((prof.materias || [])[0] || materias[0]?.nombre || "");
+      setSelectedStar(0); setSelectedTags([]); setRevText(""); setRevModalidad("Presencial");
+    }
+    setGuestEmail("");
+    setShowReviewModal(true);
+  }
+
   async function submitReview() {
     if (!selectedStar) { alert("Por favor seleccioná una calificación"); return; }
     if (!revText.trim()) { alert("Por favor escribí tu opinión"); return; }
-    if (revAsGuest && !guestEmail.trim()) { alert("Por favor ingresá tu email"); return; }
     setSubmitting(true);
-    const userEmail = revAsGuest ? guestEmail.trim() : session?.user?.email || "";
-    const verified = isUP(userEmail);
-    await supabase.from("resenas").insert({
-      profesor_id: currentProf.id,
-      materia: revMateria,
-      rating: selectedStar,
-      texto: revText.trim(),
-      tags: selectedTags,
-      modalidad: revModalidad,
-      user_email: userEmail,
-      verified: verified,
-      is_guest: revAsGuest || !session,
-    });
+
+    if (editingReview) {
+      await supabase.from("resenas").update({
+        materia: revMateria,
+        rating: selectedStar,
+        texto: revText.trim(),
+        tags: selectedTags,
+        modalidad: revModalidad,
+      }).eq("id", editingReview.id);
+    } else {
+      const userEmail = session ? session.user.email : guestEmail.trim();
+      const verified = isUP(userEmail);
+      await supabase.from("resenas").insert({
+        profesor_id: currentProf.id,
+        materia: revMateria,
+        rating: selectedStar,
+        texto: revText.trim(),
+        tags: selectedTags,
+        modalidad: revModalidad,
+        user_email: userEmail,
+        verified,
+        is_guest: !session,
+        user_id: session?.user?.id || null,
+      });
+    }
+
     await fetchAll();
     setShowReviewModal(false);
     setSubmitting(false);
-    setSelectedStar(0); setSelectedTags([]); setRevText(""); setRevModalidad("Presencial");
-    setRevAsGuest(false); setGuestEmail("");
+    setEditingReview(null);
+    setSelectedStar(0); setSelectedTags([]); setRevText(""); setRevModalidad("Presencial"); setGuestEmail("");
+  }
+
+  async function deleteReview(reviewId) {
+    if (!confirm("¿Querés eliminar esta reseña?")) return;
+    await supabase.from("resenas").delete().eq("id", reviewId);
+    await fetchAll();
   }
 
   async function addNuevaMateria() {
@@ -200,14 +233,6 @@ export default function App() {
 
   function toggleNewMateria(nombre) {
     setNewMaterias((prev) => prev.includes(nombre) ? prev.filter((x) => x !== nombre) : [...prev, nombre]);
-  }
-
-  function openReview(prof) {
-    setCurrentProf(prof);
-    setRevMateria((prof.materias || [])[0] || materias[0]?.nombre || "");
-    setSelectedStar(0); setSelectedTags([]); setRevText(""); setRevModalidad("Presencial");
-    setRevAsGuest(!session); setGuestEmail("");
-    setShowReviewModal(true);
   }
 
   const profRevs = currentProf ? (resenas[currentProf.id] || []) : [];
@@ -290,11 +315,7 @@ export default function App() {
         <>
           <div className="detail-topbar">
             <button className="back-btn" onClick={() => setCurrentProf(null)}>← Volver</button>
-            {session ? (
-              <span style={{ fontSize: 12, color: "#888" }}>
-                {isUP(session.user.email) ? <span className="badge-up">✓ Alumno UP</span> : session.user.email.split("@")[0]}
-              </span>
-            ) : null}
+            {session && <span style={{ fontSize: 12, color: "#888" }}>{isUP(session.user.email) ? <span className="badge-up">✓ Alumno UP</span> : session.user.email.split("@")[0]}</span>}
           </div>
           {(() => {
             const idx = profesores.findIndex((x) => x.id === currentProf.id);
@@ -317,43 +338,50 @@ export default function App() {
                   ))}
                 </div>
                 <div className="stats-row">
-                  {[
-                    [avg ? avg.toFixed(1) : "—", "calificación", avg ? ratingColor(avg) : undefined],
-                    [filteredProfRevs.length, "reseñas", undefined],
-                    [(currentProf.materias || []).length, "materias", undefined],
-                  ].map(([v, l, col], i) => (
+                  {[[avg ? avg.toFixed(1) : "—","calificación",avg?ratingColor(avg):undefined],[filteredProfRevs.length,"reseñas",undefined],[(currentProf.materias||[]).length,"materias",undefined]].map(([v,l,col],i) => (
                     <div key={i} className="stat-card">
-                      <div className="stat-val" style={col ? { color: col } : {}}>{v}</div>
+                      <div className="stat-val" style={col?{color:col}:{}}>{v}</div>
                       <div className="stat-lbl">{l}</div>
                     </div>
                   ))}
                 </div>
                 {topTags.length > 0 && (
                   <div className="tags" style={{ marginBottom: "1.25rem" }}>
-                    {topTags.map(([t, n]) => <span key={t} className={`tag ${tagClass(t)}`}>{t} <span style={{ opacity: 0.6 }}>({n})</span></span>)}
+                    {topTags.map(([t,n]) => <span key={t} className={`tag ${tagClass(t)}`}>{t} <span style={{opacity:0.6}}>({n})</span></span>)}
                   </div>
                 )}
                 {summary && <div className="ai-summary"><div className="ai-label">✦ Resumen IA</div>{summary}</div>}
                 <div className="section-title">
                   Reseñas {detailModalidad ? `· ${detailModalidad}` : ""}
-                  <span style={{ fontWeight: 400, color: "#aaa", fontSize: 13 }}> {filteredProfRevs.length} en total</span>
+                  <span style={{fontWeight:400,color:"#aaa",fontSize:13}}> {filteredProfRevs.length} en total</span>
                 </div>
                 {filteredProfRevs.length === 0 && <div className="empty">No hay reseñas todavía</div>}
-                {filteredProfRevs.map((r) => (
-                  <div key={r.id} className="review-card">
-                    <div className="review-top">
-                      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
-                        <span className="review-materia">{r.materia}</span>
-                        <span className="stars">{starsStr(r.rating)}</span>
-                        <span className={`modalidad-badge${r.modalidad === "Online" ? " online" : ""}`}>{r.modalidad || "Presencial"}</span>
-                        {r.verified ? <span className="badge-up">✓ Alumno UP</span> : r.is_guest ? <span className="badge-guest">Invitado</span> : null}
+                {filteredProfRevs.map((r) => {
+                  const isOwner = session && r.user_id === session.user.id;
+                  return (
+                    <div key={r.id} className="review-card">
+                      <div className="review-top">
+                        <div style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:6}}>
+                          <span className="review-materia">{r.materia}</span>
+                          <span className="stars">{starsStr(r.rating)}</span>
+                          <span className={`modalidad-badge${r.modalidad==="Online"?" online":""}`}>{r.modalidad||"Presencial"}</span>
+                          {r.verified ? <span className="badge-up">✓ Alumno UP</span> : r.is_guest ? <span className="badge-guest">Invitado</span> : null}
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <span className="review-date">{new Date(r.created_at).toLocaleDateString("es-AR",{month:"short",year:"numeric"})}</span>
+                          {isOwner && (
+                            <div style={{display:"flex",gap:4}}>
+                              <button className="review-action-btn" onClick={() => openReview(currentProf, r)}>✎</button>
+                              <button className="review-action-btn delete" onClick={() => deleteReview(r.id)}>✕</button>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="review-date">{new Date(r.created_at).toLocaleDateString("es-AR", { month: "short", year: "numeric" })}</div>
+                      <div className="review-text">{r.texto}</div>
+                      {(r.tags||[]).length > 0 && <div className="tags" style={{marginTop:6}}>{r.tags.map((t) => <span key={t} className={`tag ${tagClass(t)}`}>{t}</span>)}</div>}
                     </div>
-                    <div className="review-text">{r.texto}</div>
-                    {(r.tags || []).length > 0 && <div className="tags" style={{ marginTop: 6 }}>{r.tags.map((t) => <span key={t} className={`tag ${tagClass(t)}`}>{t}</span>)}</div>}
-                  </div>
-                ))}
+                  );
+                })}
                 <button className="add-review-btn" onClick={() => openReview(currentProf)}>✎ Agregar mi reseña</button>
               </>
             );
@@ -361,12 +389,11 @@ export default function App() {
         </>
       )}
 
-      {/* AUTH MODAL */}
       {showAuthModal && (
         <div className="modal-overlay" onClick={() => setShowAuthModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-title">{authMode === "login" ? "Iniciar sesión" : "Crear cuenta"}</div>
-            {authMode === "register" && (
+            <div className="modal-title">{authMode==="login"?"Iniciar sesión":"Crear cuenta"}</div>
+            {authMode==="register" && (
               <div className="info-box">
                 Si usás tu email <strong>@up.edu.ar</strong>, tus reseñas tendrán el badge <span className="badge-up">✓ Alumno UP</span>
               </div>
@@ -379,49 +406,42 @@ export default function App() {
               <label className="form-label">Contraseña</label>
               <input type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
             </div>
-            {authMsg && <div className={`auth-msg${authMsg.includes("Revisá") ? " success" : ""}`}>{authMsg}</div>}
+            {authMsg && <div className={`auth-msg${authMsg.includes("Revisá")?" success":""}`}>{authMsg}</div>}
             <div className="modal-actions">
               <button className="btn-cancel" onClick={() => setShowAuthModal(false)}>Cancelar</button>
-              <button className="btn-primary" onClick={handleAuth} disabled={authLoading}>
-                {authLoading ? "..." : authMode === "login" ? "Entrar" : "Registrarme"}
-              </button>
+              <button className="btn-primary" onClick={handleAuth} disabled={authLoading}>{authLoading?"...":authMode==="login"?"Entrar":"Registrarme"}</button>
             </div>
             <div className="auth-switch">
-              {authMode === "login" ? (
-                <>¿No tenés cuenta? <button onClick={() => { setAuthMode("register"); setAuthMsg(""); }}>Registrate</button></>
-              ) : (
-                <>¿Ya tenés cuenta? <button onClick={() => { setAuthMode("login"); setAuthMsg(""); }}>Iniciá sesión</button></>
-              )}
+              {authMode==="login"
+                ? <>¿No tenés cuenta? <button onClick={() => {setAuthMode("register");setAuthMsg("");}}>Registrate</button></>
+                : <>¿Ya tenés cuenta? <button onClick={() => {setAuthMode("login");setAuthMsg("");}}>Iniciá sesión</button></>}
             </div>
           </div>
         </div>
       )}
 
-      {/* REVIEW MODAL */}
       {showReviewModal && (
         <div className="modal-overlay" onClick={() => setShowReviewModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-title">Agregar reseña</div>
-            {!session && (
+            <div className="modal-title">{editingReview ? "Editar reseña" : "Agregar reseña"}</div>
+            {!session && !editingReview && (
               <div className="info-box">
                 <strong>Reseña como invitado.</strong> <button className="link-btn" onClick={() => { setShowReviewModal(false); setShowAuthModal(true); setAuthMode("login"); }}>Iniciá sesión</button> para verificarte como Alumno UP.
               </div>
             )}
-            {session && !revAsGuest && (
+            {session && (
               <div className="info-box success">
-                {isUP(session.user.email)
-                  ? <>Tu reseña tendrá el badge <span className="badge-up">✓ Alumno UP</span></>
-                  : <>Sesión iniciada como {session.user.email}</>}
+                {isUP(session.user.email) ? <>Tu reseña tendrá el badge <span className="badge-up">✓ Alumno UP</span></> : <>Sesión iniciada como {session.user.email}</>}
               </div>
             )}
             <div className="form-row">
-              <div className="form-group" style={{ flex: 1 }}>
+              <div className="form-group" style={{flex:1}}>
                 <label className="form-label">Materia cursada</label>
                 <select value={revMateria} onChange={(e) => setRevMateria(e.target.value)}>
-                  {(currentProf?.materias || []).map((m) => <option key={m}>{m}</option>)}
+                  {(currentProf?.materias||[]).map((m) => <option key={m}>{m}</option>)}
                 </select>
               </div>
-              <div className="form-group" style={{ flex: 1 }}>
+              <div className="form-group" style={{flex:1}}>
                 <label className="form-label">Modalidad</label>
                 <select value={revModalidad} onChange={(e) => setRevModalidad(e.target.value)}>
                   <option>Presencial</option>
@@ -429,7 +449,7 @@ export default function App() {
                 </select>
               </div>
             </div>
-            {!session && (
+            {!session && !editingReview && (
               <div className="form-group">
                 <label className="form-label">Tu email (opcional, para verificación UP)</label>
                 <input type="email" value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} placeholder="tu@up.edu.ar o cualquier email" />
@@ -439,7 +459,7 @@ export default function App() {
               <label className="form-label">Calificación</label>
               <div className="star-picker">
                 {[1,2,3,4,5].map((n) => (
-                  <button key={n} className={`star-btn${selectedStar >= n ? " active" : ""}`} onClick={() => setSelectedStar(n)}>★</button>
+                  <button key={n} className={`star-btn${selectedStar>=n?" active":""}`} onClick={() => setSelectedStar(n)}>★</button>
                 ))}
               </div>
             </div>
@@ -447,8 +467,8 @@ export default function App() {
               <label className="form-label">Tags</label>
               <div className="tag-picker">
                 {ALL_TAGS.map((t) => (
-                  <span key={t} className={`tag-option${selectedTags.includes(t) ? " selected" : ""}`}
-                    onClick={() => setSelectedTags(selectedTags.includes(t) ? selectedTags.filter((x) => x !== t) : [...selectedTags, t])}>
+                  <span key={t} className={`tag-option${selectedTags.includes(t)?" selected":""}`}
+                    onClick={() => setSelectedTags(selectedTags.includes(t)?selectedTags.filter((x)=>x!==t):[...selectedTags,t])}>
                     {t}
                   </span>
                 ))}
@@ -460,13 +480,12 @@ export default function App() {
             </div>
             <div className="modal-actions">
               <button className="btn-cancel" onClick={() => setShowReviewModal(false)}>Cancelar</button>
-              <button className="btn-primary" onClick={submitReview} disabled={submitting}>{submitting ? "Enviando..." : "Publicar reseña"}</button>
+              <button className="btn-primary" onClick={submitReview} disabled={submitting}>{submitting?"Guardando...":editingReview?"Guardar cambios":"Publicar reseña"}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ADD PROF MODAL */}
       {showAddProfModal && (
         <div className="modal-overlay" onClick={() => setShowAddProfModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -483,28 +502,23 @@ export default function App() {
               <label className="form-label">Materias que dicta</label>
               <div className="materia-picker">
                 {materias.map((m) => (
-                  <span key={m.id} className={`tag-option${newMaterias.includes(m.nombre) ? " selected" : ""}`}
-                    onClick={() => toggleNewMateria(m.nombre)}>
-                    {m.nombre}
-                  </span>
+                  <span key={m.id} className={`tag-option${newMaterias.includes(m.nombre)?" selected":""}`} onClick={() => toggleNewMateria(m.nombre)}>{m.nombre}</span>
                 ))}
               </div>
               {!showNewMateriaField ? (
                 <button className="add-materia-btn" onClick={() => setShowNewMateriaField(true)}>+ Agregar materia que no está en la lista</button>
               ) : (
-                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                  <input value={nuevaMateria} onChange={(e) => setNuevaMateria(e.target.value)} placeholder="Nombre de la materia..." style={{ flex: 1 }} />
-                  <button className="btn-primary" style={{ flex: "none", padding: "6px 12px" }} onClick={addNuevaMateria}>Agregar</button>
+                <div style={{display:"flex",gap:6,marginTop:8}}>
+                  <input value={nuevaMateria} onChange={(e) => setNuevaMateria(e.target.value)} placeholder="Nombre de la materia..." style={{flex:1}} />
+                  <button className="btn-primary" style={{flex:"none",padding:"6px 12px"}} onClick={addNuevaMateria}>Agregar</button>
                   <button className="btn-cancel" onClick={() => setShowNewMateriaField(false)}>✕</button>
                 </div>
               )}
-              {newMaterias.length > 0 && (
-                <div style={{ marginTop: 8, fontSize: 12, color: "#0F6E56" }}>Seleccionadas: {newMaterias.join(", ")}</div>
-              )}
+              {newMaterias.length > 0 && <div style={{marginTop:8,fontSize:12,color:"#0F6E56"}}>Seleccionadas: {newMaterias.join(", ")}</div>}
             </div>
             <div className="modal-actions">
               <button className="btn-cancel" onClick={() => setShowAddProfModal(false)}>Cancelar</button>
-              <button className="btn-primary" onClick={addProf} disabled={submitting}>{submitting ? "Guardando..." : "Agregar profesor"}</button>
+              <button className="btn-primary" onClick={addProf} disabled={submitting}>{submitting?"Guardando...":"Agregar profesor"}</button>
             </div>
           </div>
         </div>

@@ -108,11 +108,22 @@ body {
 .section-title { font-size: 14px; font-weight: 500; margin-bottom: 10px; }
 
 .review-card { background: #f9f9f7; border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; }
-.review-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 6px; flex-wrap: wrap; gap: 4px; }
+.review-top {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 6px; flex-wrap: wrap; gap: 4px;
+}
 .review-materia { font-size: 12px; font-weight: 500; }
 .review-date { font-size: 11px; color: #aaa; white-space: nowrap; }
 .review-text { font-size: 13px; color: #555; line-height: 1.5; }
 .stars { color: #BA7517; font-size: 13px; }
+
+.review-action-btn {
+  font-size: 12px; padding: 2px 7px; border-radius: 5px;
+  border: 1px solid #ddd; background: white; cursor: pointer; color: #888;
+  transition: all 0.1s;
+}
+.review-action-btn:hover { background: #f0f0f0; color: #1a1a1a; }
+.review-action-btn.delete:hover { background: #FCEBEB; color: #A32D2D; border-color: #f09595; }
 
 .modalidad-badge {
   font-size: 10px; padding: 2px 7px; border-radius: 4px;
@@ -159,14 +170,11 @@ body {
 }
 .auth-msg.success { color: #085041; background: #E1F5EE; }
 
-.auth-switch {
-  text-align: center; font-size: 13px; color: #888; margin-top: 12px;
-}
+.auth-switch { text-align: center; font-size: 13px; color: #888; margin-top: 12px; }
 .auth-switch button {
   background: none; border: none; color: #1D9E75; cursor: pointer;
   font-size: 13px; text-decoration: underline; padding: 0;
 }
-
 .link-btn {
   background: none; border: none; color: #1D9E75; cursor: pointer;
   font-size: 13px; text-decoration: underline; padding: 0;
