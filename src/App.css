@@ -8,7 +8,7 @@ body {
 
 .app { max-width: 700px; margin: 0 auto; padding: 2rem 1rem; }
 
-.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; gap: 8px; }
+.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; gap: 8px; flex-wrap: wrap; }
 .logo { font-size: 20px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: #1D9E75; }
 .subtitle { font-size: 12px; color: #888; margin-top: 2px; margin-left: 18px; }
@@ -36,6 +36,20 @@ body {
   border: none; border-bottom: 2px solid transparent; background: none; margin-bottom: -1px;
 }
 .tab.active { color: #1D9E75; border-bottom-color: #1D9E75; font-weight: 500; }
+
+/* MATERIAS GRID */
+.materias-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+.materia-card {
+  background: white; border: 1px solid #e8e8e8; border-radius: 10px;
+  padding: 14px 16px; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.materia-card:hover { border-color: #1D9E75; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.materia-nombre { font-size: 14px; font-weight: 500; color: #1a1a1a; line-height: 1.3; margin-bottom: 6px; }
+.materia-meta { font-size: 12px; color: #888; }
 
 .prof-list { display: flex; flex-direction: column; gap: 10px; }
 .prof-card {
@@ -110,6 +124,7 @@ body {
 .review-materia { font-size: 12px; font-weight: 500; }
 .review-date { font-size: 11px; color: #aaa; white-space: nowrap; }
 .review-text { font-size: 13px; color: #555; line-height: 1.5; }
+.review-username { font-size: 11px; color: #1D9E75; font-weight: 500; }
 .stars { color: #BA7517; font-size: 13px; }
 
 .review-action-btn {
@@ -121,19 +136,40 @@ body {
 
 .vote-row {
   display: flex; align-items: center; gap: 8px; margin-top: 10px;
-  padding-top: 8px; border-top: 1px solid #eee;
+  padding-top: 8px; border-top: 1px solid #eee; flex-wrap: wrap;
 }
-.vote-label { font-size: 11px; color: #aaa; margin-right: 2px; }
+.vote-label { font-size: 11px; color: #aaa; }
 .vote-btn {
   font-size: 12px; padding: 3px 10px; border-radius: 20px;
-  border: 1px solid #ddd; background: white; cursor: pointer; color: #666;
-  transition: all 0.15s; display: flex; align-items: center; gap: 4px;
+  border: 1px solid #ddd; background: white; cursor: pointer; color: #666; transition: all 0.15s;
 }
 .vote-btn.like.active { background: #E1F5EE; border-color: #5DCAA5; color: #0F6E56; font-weight: 500; }
 .vote-btn.dislike.active { background: #FCEBEB; border-color: #f09595; color: #A32D2D; font-weight: 500; }
 .vote-btn.disabled { opacity: 0.5; cursor: default; }
-.vote-btn:not(.disabled):hover { border-color: #bbb; }
-.vote-hint { font-size: 11px; color: #1D9E75; cursor: pointer; text-decoration: underline; margin-left: 4px; }
+.vote-hint { font-size: 11px; color: #1D9E75; cursor: pointer; text-decoration: underline; }
+.comments-toggle {
+  font-size: 12px; padding: 3px 10px; border-radius: 20px;
+  border: 1px solid #ddd; background: white; cursor: pointer; color: #666; margin-left: auto;
+}
+.comments-toggle:hover { background: #f0f0f0; }
+
+.comments-section {
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee;
+}
+.comment-empty { font-size: 12px; color: #aaa; padding: 4px 0; }
+.comment-item {
+  display: flex; align-items: baseline; gap: 8px; padding: 5px 0;
+  border-bottom: 1px solid #f0f0f0; flex-wrap: wrap;
+}
+.comment-username { font-size: 12px; font-weight: 600; color: #1D9E75; white-space: nowrap; }
+.comment-text { font-size: 13px; color: #555; flex: 1; line-height: 1.4; }
+.comment-date { font-size: 11px; color: #aaa; white-space: nowrap; }
+.comment-input-row { display: flex; gap: 8px; margin-top: 10px; }
+.comment-input-row input {
+  flex: 1; padding: 7px 10px; border: 1px solid #ddd; border-radius: 8px;
+  font-size: 13px; background: white; color: #1a1a1a;
+}
+.comment-login-hint { font-size: 12px; color: #888; margin-top: 8px; }
 
 .modalidad-badge {
   font-size: 10px; padding: 2px 7px; border-radius: 4px;
@@ -166,16 +202,10 @@ body {
   background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px;
   padding: 10px 12px; font-size: 12px; color: #92400e; margin-bottom: 14px; line-height: 1.5;
 }
-
-.preguntas-box {
-  background: #f5f5f0; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px;
-}
+.preguntas-box { background: #f5f5f0; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; }
 .preguntas-title { font-size: 12px; font-weight: 500; color: #555; margin-bottom: 6px; }
 .preguntas-list { list-style: none; padding: 0; }
-.preguntas-list li {
-  font-size: 12px; color: #777; padding: 3px 0;
-  padding-left: 14px; position: relative; line-height: 1.4;
-}
+.preguntas-list li { font-size: 12px; color: #777; padding: 3px 0; padding-left: 14px; position: relative; line-height: 1.4; }
 .preguntas-list li::before { content: "→"; position: absolute; left: 0; color: #1D9E75; }
 
 .info-box {
@@ -186,7 +216,6 @@ body {
 
 .auth-msg { font-size: 13px; color: #A32D2D; background: #FCEBEB; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; }
 .auth-msg.success { color: #085041; background: #E1F5EE; }
-
 .auth-switch { text-align: center; font-size: 13px; color: #888; margin-top: 12px; }
 .auth-switch button { background: none; border: none; color: #1D9E75; cursor: pointer; font-size: 13px; text-decoration: underline; padding: 0; }
 .link-btn { background: none; border: none; color: #1D9E75; cursor: pointer; font-size: 13px; text-decoration: underline; padding: 0; }
@@ -212,7 +241,7 @@ body {
 .tag-option.selected { background: #E1F5EE; color: #085041; border-color: #5DCAA5; }
 
 .materia-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; max-height: 180px; overflow-y: auto; padding: 4px; }
-.add-materia-btn { margin-top: 8px; font-size: 12px; color: #1D9E75; background: none; border: none; cursor: pointer; padding: 0; text-decoration: underline; }
+.add-materia-btn { margin-top: 8px; font-size: 12px; color: #1D9E75; background: none; border: none; cursor: pointer; padding: 0; text-decoration: underline; display: block; }
 
 .modal-actions { display: flex; gap: 8px; margin-top: 1rem; }
 .btn-primary { flex: 1; padding: 9px; background: #1D9E75; color: white; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: 500; }
