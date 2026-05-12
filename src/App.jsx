@@ -37,6 +37,7 @@ function tagClass(t) {
   if (neg.includes(t)) return "tag-red";
   return "tag-amber";
 }
+function isUP(email) { return email && email.endsWith("@up.edu.ar"); }
 function aiSummary(prof, reviews) {
   if (!reviews.length) return "";
   const avg = avgRating(reviews);
@@ -46,11 +47,12 @@ function aiSummary(prof, reviews) {
   const apellido = prof.nombre.split(" ").pop();
   if (avg >= 4.5) return `Los estudiantes tienen una opinión muy positiva de ${apellido}. Destacado por ser ${top.slice(0,2).join(" y ")}. Muy recomendado.`;
   if (avg >= 3.5) return `${apellido} tiene buenas reseñas. Los estudiantes valoran que es ${top[0] || "comprometido"}, aunque la materia requiere dedicación.`;
-  if (avg >= 2.5) return `Las opiniones sobre ${apellido} son mixtas. Algunos rescatan ${top[0] || "su conocimiento"}, pero otros señalan dificultades con la dinámica de clase.`;
-  return `La mayoría tuvo dificultades con ${apellido}. Las reseñas mencionan ${top.slice(0,2).join(" y ")} como aspectos negativos recurrentes.`;
+  if (avg >= 2.5) return `Las opiniones sobre ${apellido} son mixtas. Algunos rescatan ${top[0] || "su conocimiento"}, pero otros señalan dificultades.`;
+  return `La mayoría tuvo dificultades con ${apellido}. Las reseñas mencionan ${top.slice(0,2).join(" y ")} como aspectos negativos.`;
 }
 
 export default function App() {
+  const [session, setSession] = useState(null);
   const [profesores, setProfesores] = useState([]);
   const [resenas, setResenas] = useState({});
   const [materias, setMaterias] = useState([]);
@@ -63,20 +65,32 @@ export default function App() {
   const [detailModalidad, setDetailModalidad] = useState("");
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [showAddProfModal, setShowAddProfModal] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authMsg, setAuthMsg] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
   const [selectedStar, setSelectedStar] = useState(0);
   const [selectedTags, setSelectedTags] = useState([]);
   const [revText, setRevText] = useState("");
   const [revMateria, setRevMateria] = useState("");
   const [revModalidad, setRevModalidad] = useState("Presencial");
+  const [revAsGuest, setRevAsGuest] = useState(false);
+  const [guestEmail, setGuestEmail] = useState("");
   const [newNombre, setNewNombre] = useState("");
   const [newDept, setNewDept] = useState("");
   const [newMaterias, setNewMaterias] = useState([]);
-  const [newMateriaInput, setNewMateriaInput] = useState("");
   const [showNewMateriaField, setShowNewMateriaField] = useState(false);
   const [nuevaMateria, setNuevaMateria] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => setSession(session));
+    fetchAll();
+    return () => subscription.unsubscribe();
+  }, []);
 
   async function fetchAll() {
     setLoading(true);
@@ -96,6 +110,29 @@ export default function App() {
     setLoading(false);
   }
 
+  async function handleAuth() {
+    setAuthLoading(true);
+    setAuthMsg("");
+    if (authMode === "login") {
+      const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
+      if (error) setAuthMsg("Email o contraseña incorrectos.");
+      else { setShowAuthModal(false); setAuthEmail(""); setAuthPassword(""); }
+    } else {
+      const { error } = await supabase.auth.signUp({
+        email: authEmail,
+        password: authPassword,
+        options: { emailRedirectTo: "https://profescore-eta.vercel.app" }
+      });
+      if (error) setAuthMsg(error.message);
+      else setAuthMsg("¡Revisá tu email y hacé clic en el link de confirmación para activar tu cuenta!");
+    }
+    setAuthLoading(false);
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+  }
+
   function getFiltered() {
     const q = search.toLowerCase();
     let list = profesores.filter((p) => {
@@ -108,9 +145,6 @@ export default function App() {
       if (modalidadFilter) revs = revs.filter((r) => r.modalidad === modalidadFilter);
       return { ...p, avg: avgRating(revs), cnt: revs.length };
     });
-    if (modalidadFilter) {
-      // only show profs that have reviews in that modalidad, or all if none filtered
-    }
     if (tab === "mejor") withAvg.sort((a, b) => b.avg - a.avg);
     else if (tab === "recientes") withAvg.sort((a, b) => b.cnt - a.cnt);
     return withAvg;
@@ -121,7 +155,10 @@ export default function App() {
   async function submitReview() {
     if (!selectedStar) { alert("Por favor seleccioná una calificación"); return; }
     if (!revText.trim()) { alert("Por favor escribí tu opinión"); return; }
+    if (revAsGuest && !guestEmail.trim()) { alert("Por favor ingresá tu email"); return; }
     setSubmitting(true);
+    const userEmail = revAsGuest ? guestEmail.trim() : session?.user?.email || "";
+    const verified = isUP(userEmail);
     await supabase.from("resenas").insert({
       profesor_id: currentProf.id,
       materia: revMateria,
@@ -129,11 +166,15 @@ export default function App() {
       texto: revText.trim(),
       tags: selectedTags,
       modalidad: revModalidad,
+      user_email: userEmail,
+      verified: verified,
+      is_guest: revAsGuest || !session,
     });
     await fetchAll();
     setShowReviewModal(false);
     setSubmitting(false);
     setSelectedStar(0); setSelectedTags([]); setRevText(""); setRevModalidad("Presencial");
+    setRevAsGuest(false); setGuestEmail("");
   }
 
   async function addNuevaMateria() {
@@ -143,8 +184,7 @@ export default function App() {
       setMaterias((prev) => [...prev, data].sort((a, b) => a.nombre.localeCompare(b.nombre)));
       setNewMaterias((prev) => [...prev, data.nombre]);
     }
-    setNuevaMateria("");
-    setShowNewMateriaField(false);
+    setNuevaMateria(""); setShowNewMateriaField(false);
   }
 
   async function addProf() {
@@ -155,7 +195,7 @@ export default function App() {
     await fetchAll();
     setShowAddProfModal(false);
     setSubmitting(false);
-    setNewNombre(""); setNewDept(""); setNewMaterias([]); setNewMateriaInput("");
+    setNewNombre(""); setNewDept(""); setNewMaterias([]);
   }
 
   function toggleNewMateria(nombre) {
@@ -166,6 +206,7 @@ export default function App() {
     setCurrentProf(prof);
     setRevMateria((prof.materias || [])[0] || materias[0]?.nombre || "");
     setSelectedStar(0); setSelectedTags([]); setRevText(""); setRevModalidad("Presencial");
+    setRevAsGuest(!session); setGuestEmail("");
     setShowReviewModal(true);
   }
 
@@ -184,7 +225,19 @@ export default function App() {
               <div className="logo"><div className="dot" />ProfeScore</div>
               <div className="subtitle">Universidad de Palermo</div>
             </div>
-            <button className="btn-outline" onClick={() => setShowAddProfModal(true)}>+ Agregar profesor</button>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {session ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 12, color: "#888" }}>
+                    {isUP(session.user.email) ? <span className="badge-up">✓ Alumno UP</span> : session.user.email.split("@")[0]}
+                  </span>
+                  <button className="btn-outline" onClick={handleLogout}>Salir</button>
+                </div>
+              ) : (
+                <button className="btn-outline" onClick={() => { setShowAuthModal(true); setAuthMode("login"); setAuthMsg(""); }}>Iniciar sesión</button>
+              )}
+              <button className="btn-outline" onClick={() => setShowAddProfModal(true)}>+ Profesor</button>
+            </div>
           </div>
           <div className="search-bar">
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar profesor o materia..." />
@@ -219,7 +272,7 @@ export default function App() {
                       <div className="avatar" style={{ background: c.bg, color: c.color }}>{initials(p.nombre)}</div>
                       <div className="prof-info">
                         <div className="prof-name">{p.nombre}</div>
-                        <div className="prof-meta">{p.departamento} · {revs.length} reseña{revs.length !== 1 ? "s" : ""}{modalidadFilter ? ` ${modalidadFilter.toLowerCase()}` : ""}</div>
+                        <div className="prof-meta">{p.departamento} · {revs.length} reseña{revs.length !== 1 ? "s" : ""}</div>
                         <div className="tags">{tTop.map((t) => <span key={t} className={`tag ${tagClass(t)}`}>{t}</span>)}</div>
                       </div>
                       <div className="rating-badge">
@@ -235,7 +288,14 @@ export default function App() {
         </>
       ) : (
         <>
-          <button className="back-btn" onClick={() => setCurrentProf(null)}>← Volver</button>
+          <div className="detail-topbar">
+            <button className="back-btn" onClick={() => setCurrentProf(null)}>← Volver</button>
+            {session ? (
+              <span style={{ fontSize: 12, color: "#888" }}>
+                {isUP(session.user.email) ? <span className="badge-up">✓ Alumno UP</span> : session.user.email.split("@")[0]}
+              </span>
+            ) : null}
+          </div>
           {(() => {
             const idx = profesores.findIndex((x) => x.id === currentProf.id);
             const c = colorFor(idx);
@@ -251,13 +311,11 @@ export default function App() {
                     <div className="tags" style={{ marginTop: 6 }}>{(currentProf.materias || []).map((m) => <span key={m} className="tag tag-blue">{m}</span>)}</div>
                   </div>
                 </div>
-
                 <div className="modalidad-tabs">
                   {[["","Todas"],["Presencial","Presencial"],["Online","Online"]].map(([k,l]) => (
                     <button key={k} className={`modalidad-tab${detailModalidad===k?" active":""}`} onClick={() => setDetailModalidad(k)}>{l}</button>
                   ))}
                 </div>
-
                 <div className="stats-row">
                   {[
                     [avg ? avg.toFixed(1) : "—", "calificación", avg ? ratingColor(avg) : undefined],
@@ -275,24 +333,20 @@ export default function App() {
                     {topTags.map(([t, n]) => <span key={t} className={`tag ${tagClass(t)}`}>{t} <span style={{ opacity: 0.6 }}>({n})</span></span>)}
                   </div>
                 )}
-                {summary && (
-                  <div className="ai-summary">
-                    <div className="ai-label">✦ Resumen IA</div>
-                    {summary}
-                  </div>
-                )}
+                {summary && <div className="ai-summary"><div className="ai-label">✦ Resumen IA</div>{summary}</div>}
                 <div className="section-title">
                   Reseñas {detailModalidad ? `· ${detailModalidad}` : ""}
                   <span style={{ fontWeight: 400, color: "#aaa", fontSize: 13 }}> {filteredProfRevs.length} en total</span>
                 </div>
-                {filteredProfRevs.length === 0 && <div className="empty">No hay reseñas{detailModalidad ? ` de modalidad ${detailModalidad.toLowerCase()}` : ""} todavía</div>}
+                {filteredProfRevs.length === 0 && <div className="empty">No hay reseñas todavía</div>}
                 {filteredProfRevs.map((r) => (
                   <div key={r.id} className="review-card">
                     <div className="review-top">
-                      <div>
+                      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
                         <span className="review-materia">{r.materia}</span>
-                        <span className="stars" style={{ marginLeft: 8 }}>{starsStr(r.rating)}</span>
+                        <span className="stars">{starsStr(r.rating)}</span>
                         <span className={`modalidad-badge${r.modalidad === "Online" ? " online" : ""}`}>{r.modalidad || "Presencial"}</span>
+                        {r.verified ? <span className="badge-up">✓ Alumno UP</span> : r.is_guest ? <span className="badge-guest">Invitado</span> : null}
                       </div>
                       <div className="review-date">{new Date(r.created_at).toLocaleDateString("es-AR", { month: "short", year: "numeric" })}</div>
                     </div>
@@ -307,18 +361,67 @@ export default function App() {
         </>
       )}
 
+      {/* AUTH MODAL */}
+      {showAuthModal && (
+        <div className="modal-overlay" onClick={() => setShowAuthModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-title">{authMode === "login" ? "Iniciar sesión" : "Crear cuenta"}</div>
+            {authMode === "register" && (
+              <div className="info-box">
+                Si usás tu email <strong>@up.edu.ar</strong>, tus reseñas tendrán el badge <span className="badge-up">✓ Alumno UP</span>
+              </div>
+            )}
+            <div className="form-group">
+              <label className="form-label">Email</label>
+              <input type="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} placeholder="tu@email.com" />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Contraseña</label>
+              <input type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
+            </div>
+            {authMsg && <div className={`auth-msg${authMsg.includes("Revisá") ? " success" : ""}`}>{authMsg}</div>}
+            <div className="modal-actions">
+              <button className="btn-cancel" onClick={() => setShowAuthModal(false)}>Cancelar</button>
+              <button className="btn-primary" onClick={handleAuth} disabled={authLoading}>
+                {authLoading ? "..." : authMode === "login" ? "Entrar" : "Registrarme"}
+              </button>
+            </div>
+            <div className="auth-switch">
+              {authMode === "login" ? (
+                <>¿No tenés cuenta? <button onClick={() => { setAuthMode("register"); setAuthMsg(""); }}>Registrate</button></>
+              ) : (
+                <>¿Ya tenés cuenta? <button onClick={() => { setAuthMode("login"); setAuthMsg(""); }}>Iniciá sesión</button></>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* REVIEW MODAL */}
       {showReviewModal && (
         <div className="modal-overlay" onClick={() => setShowReviewModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-title">Agregar reseña</div>
-            <div class="form-row">
-              <div className="form-group" style={{flex:1}}>
+            {!session && (
+              <div className="info-box">
+                <strong>Reseña como invitado.</strong> <button className="link-btn" onClick={() => { setShowReviewModal(false); setShowAuthModal(true); setAuthMode("login"); }}>Iniciá sesión</button> para verificarte como Alumno UP.
+              </div>
+            )}
+            {session && !revAsGuest && (
+              <div className="info-box success">
+                {isUP(session.user.email)
+                  ? <>Tu reseña tendrá el badge <span className="badge-up">✓ Alumno UP</span></>
+                  : <>Sesión iniciada como {session.user.email}</>}
+              </div>
+            )}
+            <div className="form-row">
+              <div className="form-group" style={{ flex: 1 }}>
                 <label className="form-label">Materia cursada</label>
                 <select value={revMateria} onChange={(e) => setRevMateria(e.target.value)}>
                   {(currentProf?.materias || []).map((m) => <option key={m}>{m}</option>)}
                 </select>
               </div>
-              <div className="form-group" style={{flex:1}}>
+              <div className="form-group" style={{ flex: 1 }}>
                 <label className="form-label">Modalidad</label>
                 <select value={revModalidad} onChange={(e) => setRevModalidad(e.target.value)}>
                   <option>Presencial</option>
@@ -326,6 +429,12 @@ export default function App() {
                 </select>
               </div>
             </div>
+            {!session && (
+              <div className="form-group">
+                <label className="form-label">Tu email (opcional, para verificación UP)</label>
+                <input type="email" value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} placeholder="tu@up.edu.ar o cualquier email" />
+              </div>
+            )}
             <div className="form-group">
               <label className="form-label">Calificación</label>
               <div className="star-picker">
@@ -335,11 +444,11 @@ export default function App() {
               </div>
             </div>
             <div className="form-group">
-              <label className="form-label">Tags (hasta 4)</label>
+              <label className="form-label">Tags</label>
               <div className="tag-picker">
                 {ALL_TAGS.map((t) => (
                   <span key={t} className={`tag-option${selectedTags.includes(t) ? " selected" : ""}`}
-                    onClick={() => setSelectedTags(selectedTags.includes(t) ? selectedTags.filter((x) => x !== t) : selectedTags.length < 4 ? [...selectedTags, t] : selectedTags)}>
+                    onClick={() => setSelectedTags(selectedTags.includes(t) ? selectedTags.filter((x) => x !== t) : [...selectedTags, t])}>
                     {t}
                   </span>
                 ))}
@@ -357,6 +466,7 @@ export default function App() {
         </div>
       )}
 
+      {/* ADD PROF MODAL */}
       {showAddProfModal && (
         <div className="modal-overlay" onClick={() => setShowAddProfModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -389,9 +499,7 @@ export default function App() {
                 </div>
               )}
               {newMaterias.length > 0 && (
-                <div style={{ marginTop: 8, fontSize: 12, color: "#0F6E56" }}>
-                  Seleccionadas: {newMaterias.join(", ")}
-                </div>
+                <div style={{ marginTop: 8, fontSize: 12, color: "#0F6E56" }}>Seleccionadas: {newMaterias.join(", ")}</div>
               )}
             </div>
             <div className="modal-actions">
