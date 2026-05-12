@@ -149,8 +149,11 @@ function tagClass(t) {
 function isUP(email) { return email&&email.endsWith("@up.edu.ar"); }
 function isAdmin(uid) { return uid===ADMIN_ID; }
 function timeAgo(ts) {
-  const d=new Date(ts); const now=new Date(); const diff=Math.floor((now-d)/1000);
-  if(diff<60) return "ahora"; if(diff<3600) return `${Math.floor(diff/60)}m`;
+  const d=new Date(ts.endsWith("Z")?ts:ts+"Z");
+  const now=new Date();
+  const diff=Math.floor((now-d)/1000);
+  if(diff<60) return "ahora";
+  if(diff<3600) return `${Math.floor(diff/60)}m`;
   if(diff<86400) return `${Math.floor(diff/3600)}h`;
   return d.toLocaleDateString("es-AR",{day:"numeric",month:"short"});
 }
