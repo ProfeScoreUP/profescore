@@ -878,8 +878,12 @@ export default function App() {
             {myVotedReviews.length===0?<div className="empty">Todavía no votaste ninguna reseña</div>:myVotedReviews.map((r)=>renderReviewCard(r,true))}</>
           ):view==="comunidad"?(
             <>
-              <div className="header"><div><div className="logo"><div className="dot"/>Comunidad</div></div><div style={{display:"flex",gap:8}}><button className="btn-outline" onClick={()=>setShowAddMateriaModal(true)}>+ Materia</button><button className="btn-outline" onClick={()=>setShowAddProfModal(true)}>+ Profesor</button></div></div>
-              {!session?<div className="empty"><button className="link-btn" onClick={()=>{setShowAuthModal(true);setAuthMode("login");}}>Iniciá sesión</button> para ver los perfiles.</div>:<div className="users-list">{Object.values(perfilesMap).map((p)=>(
+            <div className="header"><div><div className="logo"><div className="dot"/>Comunidad</div></div><div style={{display:"flex",gap:8}}><button className="btn-outline" onClick={()=>setShowAddMateriaModal(true)}>+ Materia</button><button className="btn-outline" onClick={()=>setShowAddProfModal(true)}>+ Profesor</button></div></div>
+<div className="search-bar"><input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Buscar por nombre o carrera..."/></div>
+{!session?<div className="empty"><button className="link-btn" onClick={()=>{setShowAuthModal(true);setAuthMode("login");}}>Iniciá sesión</button> para ver los perfiles.</div>:<div className="users-list">{Object.values(perfilesMap).filter((p)=>
+  p.username?.toLowerCase().includes(search.toLowerCase())||
+  p.carrera?.toLowerCase().includes(search.toLowerCase())
+).map((p)=>(
                 <div key={p.id} className="user-card" onClick={()=>{setViewingUser(p);setView("perfil-usuario");}}>
                   <Avatar url={p.foto_url} name={p.username} size={40} fontSize={14}/>
                   <div><div style={{fontWeight:500,fontSize:14}}>@{p.username}</div>{p.carrera&&<div style={{fontSize:12,color:"#888"}}>{p.carrera}</div>}</div>
