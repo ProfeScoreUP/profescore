@@ -12,8 +12,22 @@ const COLORS = [
 ];
 
 const ALL_TAGS = [
-  "Explica bien","Exigente","Accesible","Buena onda",
-  "Parciales difíciles","Mucha teoría","Práctico","Impuntual","Claro","Aburrido",
+  "Explica bien","Exigente","Buena onda","Parciales difíciles","Claro","Aburrido",
+  "Respondus","Buenas devoluciones","Comprometido","Oral difícil","Brinda apoyo","Muchas tareas","Buenas clases",
+];
+
+const MATERIAS_UP = [
+  "Contabilidad I","Contabilidad II","Administración","Análisis Matemático I","Análisis Matemático II",
+  "Marketing","Tendencias Sociales","Microeconomía","Macroeconomía","Costos","Impuestos",
+  "Administración de Recursos Humanos","Comercio y Negocios Internacionales","Diseño de Organizaciones y Procesos",
+  "Comunicaciones Integradas de Marketing","Sistemas Integrados de Información",
+  "Ética, Responsabilidad Social y Medio Ambiente","Integración, Ambientación y Comunicación",
+  "Matemática Financiera","Producción y Servicios","Estructura Económica","Estadística I","Estadística II",
+  "Comportamiento Organizacional","Finanzas de Empresas","Derecho A","Derecho B",
+  "Gestión de la Producción","Fundamentos de Estrategia","Liderazgo y Negociación",
+  "Investigación e Innovación","Análisis de Estados Contables","Administración Estratégica",
+  "Proyectos de Inversión","Control de Gestión","Estrategias de Management Global",
+  "Ejercicio Profesional de la Administración",
 ];
 
 function initials(name) {
@@ -31,8 +45,8 @@ function ratingColor(r) {
 }
 function stars(r) { return "★".repeat(Math.round(r)) + "☆".repeat(5 - Math.round(r)); }
 function tagClass(t) {
-  const pos = ["Explica bien","Accesible","Buena onda","Práctico","Claro"];
-  const neg = ["Impuntual","Aburrido"];
+  const pos = ["Explica bien","Buena onda","Claro","Buenas devoluciones","Comprometido","Brinda apoyo","Buenas clases"];
+  const neg = ["Aburrido","Oral difícil","Muchas tareas","Respondus"];
   if (pos.includes(t)) return "tag-green";
   if (neg.includes(t)) return "tag-red";
   return "tag-amber";
@@ -124,7 +138,7 @@ export default function App() {
 
   function openReview(prof) {
     setCurrentProf(prof);
-    setRevMateria((prof.materias || [])[0] || "");
+    setRevMateria((prof.materias || [])[0] || MATERIAS_UP[0]);
     setSelectedStar(0); setSelectedTags([]); setRevText("");
     setShowReviewModal(true);
   }
@@ -139,13 +153,16 @@ export default function App() {
       {!currentProf ? (
         <>
           <div className="header">
-            <div className="logo"><div className="dot" />ProfeScore</div>
+            <div>
+              <div className="logo"><div className="dot" />ProfeScore</div>
+              <div className="subtitle">Universidad de Palermo · Lic. en Administración</div>
+            </div>
             <button className="btn-outline" onClick={() => setShowAddProfModal(true)}>+ Agregar profesor</button>
           </div>
           <div className="search-bar">
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar profesor o materia..." />
             <select value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)}>
-              <option value="">Todas las materias</option>
+              <option value="">Todas las áreas</option>
               {depts.map((d) => <option key={d} value={d}>{d}</option>)}
             </select>
           </div>
@@ -224,7 +241,7 @@ export default function App() {
                     {summary}
                   </div>
                 )}
-                <div className="section-title">Reseñas <span style={{ fontWeight: 400, color: "var(--color-muted)", fontSize: 13 }}>{profRevs.length} en total</span></div>
+                <div className="section-title">Reseñas <span style={{ fontWeight: 400, color: "#aaa", fontSize: 13 }}>{profRevs.length} en total</span></div>
                 {profRevs.length === 0 && <div className="empty">Sé el primero en dejar una reseña</div>}
                 {profRevs.map((r) => (
                   <div key={r.id} className="review-card">
@@ -250,7 +267,7 @@ export default function App() {
             <div className="form-group">
               <label className="form-label">Materia cursada</label>
               <select value={revMateria} onChange={(e) => setRevMateria(e.target.value)}>
-                {(currentProf?.materias || []).map((m) => <option key={m}>{m}</option>)}
+                {(currentProf?.materias || MATERIAS_UP).map((m) => <option key={m}>{m}</option>)}
               </select>
             </div>
             <div className="form-group">
@@ -262,7 +279,7 @@ export default function App() {
               </div>
             </div>
             <div className="form-group">
-              <label className="form-label">Tags</label>
+              <label className="form-label">Tags (elegí hasta 4)</label>
               <div className="tag-picker">
                 {ALL_TAGS.map((t) => (
                   <span key={t} className={`tag-option${selectedTags.includes(t) ? " selected" : ""}`}
@@ -274,7 +291,7 @@ export default function App() {
             </div>
             <div className="form-group">
               <label className="form-label">Tu opinión</label>
-              <textarea value={revText} onChange={(e) => setRevText(e.target.value)} placeholder="Contá tu experiencia..." />
+              <textarea value={revText} onChange={(e) => setRevText(e.target.value)} placeholder="Contá tu experiencia con este profesor..." />
             </div>
             <div className="modal-actions">
               <button className="btn-cancel" onClick={() => setShowReviewModal(false)}>Cancelar</button>
@@ -293,12 +310,12 @@ export default function App() {
               <input value={newNombre} onChange={(e) => setNewNombre(e.target.value)} placeholder="Ej: Dra. Ana García" />
             </div>
             <div className="form-group">
-              <label className="form-label">Departamento</label>
-              <input value={newDept} onChange={(e) => setNewDept(e.target.value)} placeholder="Ej: Matemáticas" />
+              <label className="form-label">Área / Departamento</label>
+              <input value={newDept} onChange={(e) => setNewDept(e.target.value)} placeholder="Ej: Contabilidad, Marketing..." />
             </div>
             <div className="form-group">
               <label className="form-label">Materias que dicta (separadas por coma)</label>
-              <input value={newMaterias} onChange={(e) => setNewMaterias(e.target.value)} placeholder="Ej: Cálculo I, Cálculo II" />
+              <input value={newMaterias} onChange={(e) => setNewMaterias(e.target.value)} placeholder="Ej: Contabilidad I, Contabilidad II" />
             </div>
             <div className="modal-actions">
               <button className="btn-cancel" onClick={() => setShowAddProfModal(false)}>Cancelar</button>
