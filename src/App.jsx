@@ -16,6 +16,26 @@ const ALL_TAGS = [
   "Respondus","Buenas devoluciones","Comprometido","Oral difícil","Brinda apoyo","Muchas tareas","Buenas clases",
 ];
 
+const PREGUNTAS_ONLINE = [
+  "¿Qué tal es el contenido de los módulos? ¿Es claro y completo?",
+  "¿Ofrece clases de consulta sincrónicas?",
+  "¿Da devoluciones completas de las actividades y parciales?",
+  "¿Hace un seguimiento semana a semana?",
+  "¿Da actividades con entrega obligatoria en cada módulo?",
+  "¿Cómo es el oral?",
+];
+
+const PREGUNTAS_PRESENCIAL = [
+  "¿Cómo explica en clase? ¿Es claro y organizado?",
+  "¿Está disponible para consultas antes/después de clase o por mail?",
+  "¿Cómo son los parciales en relación a lo que se vio en clase?",
+  "¿Da devoluciones de los parciales y trabajos prácticos?",
+  "¿Cumple con el horario y el programa de la materia?",
+  "¿Recomendarías cursar con este profesor?",
+];
+
+const DISCLAIMER = "Recordá que una buena reseña ayuda a tus compañeros a tomar mejores decisiones. Intentá ser objetivo/a: una mala nota no siempre significa un mal profesor. Contá tu experiencia real.";
+
 function initials(name) {
   return name.split(" ").filter((w) => w.length > 2).slice(0, 2).map((w) => w[0]).join("");
 }
@@ -56,6 +76,7 @@ export default function App() {
   const [profesores, setProfesores] = useState([]);
   const [resenas, setResenas] = useState({});
   const [materias, setMaterias] = useState([]);
+  const [votos, setVotos] = useState({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState("");
@@ -94,20 +115,50 @@ export default function App() {
 
   async function fetchAll() {
     setLoading(true);
-    const [{ data: profs }, { data: revs }, { data: mats }] = await Promise.all([
+    const [{ data: profs }, { data: revs }, { data: mats }, { data: vots }] = await Promise.all([
       supabase.from("profesores").select("*").order("nombre"),
       supabase.from("resenas").select("*").order("created_at", { ascending: false }),
       supabase.from("materias").select("*").order("nombre"),
+      supabase.from("votos").select("*"),
     ]);
     const resMap = {};
     (revs || []).forEach((r) => {
       if (!resMap[r.profesor_id]) resMap[r.profesor_id] = [];
       resMap[r.profesor_id].push(r);
     });
+    const votMap = {};
+    (vots || []).forEach((v) => {
+      if (!votMap[v.resena_id]) votMap[v.resena_id] = [];
+      votMap[v.resena_id].push(v);
+    });
     setProfesores(profs || []);
     setResenas(resMap);
     setMaterias(mats || []);
+    setVotos(votMap);
     setLoading(false);
+  }
+
+  async function handleVoto(resenaId, tipo, resenaUserId) {
+    if (!session) { setShowAuthModal(true); setAuthMode("login"); return; }
+    if (session.user.id === resenaUserId) return;
+    const misVotos = (votos[resenaId] || []);
+    const miVoto = misVotos.find((v) => v.user_id === session.user.id);
+    if (miVoto) {
+      if (miVoto.tipo === tipo) {
+        await supabase.from("votos").delete().eq("id", miVoto.id);
+      } else {
+        await supabase.from("votos").update({ tipo }).eq("id", miVoto.id);
+      }
+    } else {
+      await supabase.from("votos").insert({ resena_id: resenaId, user_id: session.user.id, tipo });
+    }
+    const { data: vots } = await supabase.from("votos").select("*");
+    const votMap = {};
+    (vots || []).forEach((v) => {
+      if (!votMap[v.resena_id]) votMap[v.resena_id] = [];
+      votMap[v.resena_id].push(v);
+    });
+    setVotos(votMap);
   }
 
   async function handleAuth() {
@@ -119,8 +170,7 @@ export default function App() {
       else { setShowAuthModal(false); setAuthEmail(""); setAuthPassword(""); }
     } else {
       const { error } = await supabase.auth.signUp({
-        email: authEmail,
-        password: authPassword,
+        email: authEmail, password: authPassword,
         options: { emailRedirectTo: "https://profescore-eta.vercel.app" }
       });
       if (error) setAuthMsg(error.message);
@@ -171,32 +221,20 @@ export default function App() {
     if (!selectedStar) { alert("Por favor seleccioná una calificación"); return; }
     if (!revText.trim()) { alert("Por favor escribí tu opinión"); return; }
     setSubmitting(true);
-
     if (editingReview) {
       await supabase.from("resenas").update({
-        materia: revMateria,
-        rating: selectedStar,
-        texto: revText.trim(),
-        tags: selectedTags,
-        modalidad: revModalidad,
+        materia: revMateria, rating: selectedStar, texto: revText.trim(), tags: selectedTags, modalidad: revModalidad,
       }).eq("id", editingReview.id);
     } else {
       const userEmail = session ? session.user.email : guestEmail.trim();
       const verified = isUP(userEmail);
       await supabase.from("resenas").insert({
-        profesor_id: currentProf.id,
-        materia: revMateria,
-        rating: selectedStar,
-        texto: revText.trim(),
-        tags: selectedTags,
-        modalidad: revModalidad,
-        user_email: userEmail,
-        verified,
-        is_guest: !session,
+        profesor_id: currentProf.id, materia: revMateria, rating: selectedStar,
+        texto: revText.trim(), tags: selectedTags, modalidad: revModalidad,
+        user_email: userEmail, verified, is_guest: !session,
         user_id: session?.user?.id || null,
       });
     }
-
     await fetchAll();
     setShowReviewModal(false);
     setSubmitting(false);
@@ -240,6 +278,8 @@ export default function App() {
   const tagCounts = {};
   filteredProfRevs.forEach((r) => (r.tags || []).forEach((t) => (tagCounts[t] = (tagCounts[t] || 0) + 1)));
   const topTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  const preguntas = revModalidad === "Online" ? PREGUNTAS_ONLINE : PREGUNTAS_PRESENCIAL;
 
   return (
     <div className="app">
@@ -338,11 +378,8 @@ export default function App() {
                   ))}
                 </div>
                 <div className="stats-row">
-                  {[[avg ? avg.toFixed(1) : "—","calificación",avg?ratingColor(avg):undefined],[filteredProfRevs.length,"reseñas",undefined],[(currentProf.materias||[]).length,"materias",undefined]].map(([v,l,col],i) => (
-                    <div key={i} className="stat-card">
-                      <div className="stat-val" style={col?{color:col}:{}}>{v}</div>
-                      <div className="stat-lbl">{l}</div>
-                    </div>
+                  {[[avg?avg.toFixed(1):"—","calificación",avg?ratingColor(avg):undefined],[filteredProfRevs.length,"reseñas",undefined],[(currentProf.materias||[]).length,"materias",undefined]].map(([v,l,col],i) => (
+                    <div key={i} className="stat-card"><div className="stat-val" style={col?{color:col}:{}}>{v}</div><div className="stat-lbl">{l}</div></div>
                   ))}
                 </div>
                 {topTags.length > 0 && (
@@ -358,6 +395,11 @@ export default function App() {
                 {filteredProfRevs.length === 0 && <div className="empty">No hay reseñas todavía</div>}
                 {filteredProfRevs.map((r) => {
                   const isOwner = session && r.user_id === session.user.id;
+                  const revVotos = votos[r.id] || [];
+                  const likes = revVotos.filter((v) => v.tipo === "like").length;
+                  const dislikes = revVotos.filter((v) => v.tipo === "dislike").length;
+                  const miVoto = session ? revVotos.find((v) => v.user_id === session.user.id) : null;
+                  const puedeVotar = session && !isOwner;
                   return (
                     <div key={r.id} className="review-card">
                       <div className="review-top">
@@ -379,6 +421,24 @@ export default function App() {
                       </div>
                       <div className="review-text">{r.texto}</div>
                       {(r.tags||[]).length > 0 && <div className="tags" style={{marginTop:6}}>{r.tags.map((t) => <span key={t} className={`tag ${tagClass(t)}`}>{t}</span>)}</div>}
+                      <div className="vote-row">
+                        <span className="vote-label">¿Te fue útil?</span>
+                        <button
+                          className={`vote-btn like${miVoto?.tipo==="like"?" active":""} ${!puedeVotar?"disabled":""}`}
+                          onClick={() => puedeVotar && handleVoto(r.id, "like", r.user_id)}
+                          title={!session?"Iniciá sesión para votar":isOwner?"No podés votar tu propia reseña":""}
+                        >
+                          👍 {likes}
+                        </button>
+                        <button
+                          className={`vote-btn dislike${miVoto?.tipo==="dislike"?" active":""} ${!puedeVotar?"disabled":""}`}
+                          onClick={() => puedeVotar && handleVoto(r.id, "dislike", r.user_id)}
+                          title={!session?"Iniciá sesión para votar":isOwner?"No podés votar tu propia reseña":""}
+                        >
+                          👎 {dislikes}
+                        </button>
+                        {!session && <span className="vote-hint" onClick={() => { setShowAuthModal(true); setAuthMode("login"); }}>Iniciá sesión para votar</span>}
+                      </div>
                     </div>
                   );
                 })}
@@ -389,14 +449,13 @@ export default function App() {
         </>
       )}
 
+      {/* AUTH MODAL */}
       {showAuthModal && (
         <div className="modal-overlay" onClick={() => setShowAuthModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-title">{authMode==="login"?"Iniciar sesión":"Crear cuenta"}</div>
             {authMode==="register" && (
-              <div className="info-box">
-                Si usás tu email <strong>@up.edu.ar</strong>, tus reseñas tendrán el badge <span className="badge-up">✓ Alumno UP</span>
-              </div>
+              <div className="info-box">Si usás tu email <strong>@up.edu.ar</strong>, tus reseñas tendrán el badge <span className="badge-up">✓ Alumno UP</span></div>
             )}
             <div className="form-group">
               <label className="form-label">Email</label>
@@ -420,10 +479,18 @@ export default function App() {
         </div>
       )}
 
+      {/* REVIEW MODAL */}
       {showReviewModal && (
         <div className="modal-overlay" onClick={() => setShowReviewModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-title">{editingReview ? "Editar reseña" : "Agregar reseña"}</div>
+            <div className="modal-title">{editingReview?"Editar reseña":"Agregar reseña"}</div>
+
+            {!editingReview && (
+              <div className="disclaimer-box">
+                ⚠️ {DISCLAIMER}
+              </div>
+            )}
+
             {!session && !editingReview && (
               <div className="info-box">
                 <strong>Reseña como invitado.</strong> <button className="link-btn" onClick={() => { setShowReviewModal(false); setShowAuthModal(true); setAuthMode("login"); }}>Iniciá sesión</button> para verificarte como Alumno UP.
@@ -434,6 +501,7 @@ export default function App() {
                 {isUP(session.user.email) ? <>Tu reseña tendrá el badge <span className="badge-up">✓ Alumno UP</span></> : <>Sesión iniciada como {session.user.email}</>}
               </div>
             )}
+
             <div className="form-row">
               <div className="form-group" style={{flex:1}}>
                 <label className="form-label">Materia cursada</label>
@@ -449,12 +517,14 @@ export default function App() {
                 </select>
               </div>
             </div>
+
             {!session && !editingReview && (
               <div className="form-group">
                 <label className="form-label">Tu email (opcional, para verificación UP)</label>
                 <input type="email" value={guestEmail} onChange={(e) => setGuestEmail(e.target.value)} placeholder="tu@up.edu.ar o cualquier email" />
               </div>
             )}
+
             <div className="form-group">
               <label className="form-label">Calificación</label>
               <div className="star-picker">
@@ -463,6 +533,7 @@ export default function App() {
                 ))}
               </div>
             </div>
+
             <div className="form-group">
               <label className="form-label">Tags</label>
               <div className="tag-picker">
@@ -474,10 +545,21 @@ export default function App() {
                 ))}
               </div>
             </div>
+
+            {!editingReview && (
+              <div className="preguntas-box">
+                <div className="preguntas-title">💡 Algunas preguntas para guiar tu reseña ({revModalidad}):</div>
+                <ul className="preguntas-list">
+                  {preguntas.map((p, i) => <li key={i}>{p}</li>)}
+                </ul>
+              </div>
+            )}
+
             <div className="form-group">
               <label className="form-label">Tu opinión</label>
               <textarea value={revText} onChange={(e) => setRevText(e.target.value)} placeholder="Contá tu experiencia con este profesor..." />
             </div>
+
             <div className="modal-actions">
               <button className="btn-cancel" onClick={() => setShowReviewModal(false)}>Cancelar</button>
               <button className="btn-primary" onClick={submitReview} disabled={submitting}>{submitting?"Guardando...":editingReview?"Guardar cambios":"Publicar reseña"}</button>
@@ -486,6 +568,7 @@ export default function App() {
         </div>
       )}
 
+      {/* ADD PROF MODAL */}
       {showAddProfModal && (
         <div className="modal-overlay" onClick={() => setShowAddProfModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
