@@ -122,6 +122,16 @@ const CARRERAS = [
   "Otra",
 ];
 
+const CATEGORIA_COLORS = {
+  "Aranceles y pagos": {bg:"#FAEEDA",color:"#854F0B"},
+  "Ayuda con estudio": {bg:"#E1F5EE",color:"#0F6E56"},
+  "Inscripción a materias": {bg:"#E6F1FB",color:"#185FA5"},
+  "Vida universitaria": {bg:"#EEEDFE",color:"#3C3489"},
+  "Pasantías y trabajo": {bg:"#FBEAF0",color:"#72243E"},
+  "Tecnología y herramientas": {bg:"#FCEBEB",color:"#A32D2D"},
+  "Otros / General": {bg:"#f5f5f0",color:"#555"},
+};
+
 const ADJ = ["Tigre","Luna","Viento","Piedra","Nube","Rio","Fuego","Hielo","Trueno","Bosque","Mar","Estrella","Rayo","Niebla","Selva","Pico","Lago","Ola","Bruma","Cima"];
 const SUST = ["Veloz","Nomade","Calmo","Sabio","Feroz","Libre","Sereno","Agil","Bravo","Fiero","Quieto","Audaz","Firme","Leve","Hondo","Vivo","Claro","Oscuro","Suave","Fuerte"];
 
@@ -162,16 +172,6 @@ function Avatar({url,name,size=44,fontSize=14}) {
   if(url) return <div style={{width:size,height:size,borderRadius:"50%",overflow:"hidden",flexShrink:0}}><img src={url} alt={name} style={{width:"100%",height:"100%",objectFit:"cover"}}/></div>;
   return <div style={{width:size,height:size,borderRadius:"50%",background:c.bg,color:c.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:600,fontSize,flexShrink:0}}>{initials(name)}</div>;
 }
-
-const CATEGORIA_COLORS = {
-  "Aranceles y pagos": {bg:"#FAEEDA",color:"#854F0B"},
-  "Ayuda con estudio": {bg:"#E1F5EE",color:"#0F6E56"},
-  "Inscripción a materias": {bg:"#E6F1FB",color:"#185FA5"},
-  "Vida universitaria": {bg:"#EEEDFE",color:"#3C3489"},
-  "Pasantías y trabajo": {bg:"#FBEAF0",color:"#72243E"},
-  "Tecnología y herramientas": {bg:"#FCEBEB",color:"#A32D2D"},
-  "Otros / General": {bg:"#f5f5f0",color:"#555"},
-};
 
 export default function App() {
   const [session,setSession]=useState(null);
@@ -292,12 +292,9 @@ export default function App() {
     (perfs||[]).forEach((p)=>{ pMap[p.id]=p; });
     const respMap={};
     (resps||[]).forEach((r)=>{ if(!respMap[r.hilo_id]) respMap[r.hilo_id]=[]; respMap[r.hilo_id].push(r); });
-
     setProfesores(profs||[]); setResenas(resMap); setMaterias(mats||[]);
     setVotos(votMap); setComentarios(comMap); setPerfilesMap(pMap);
     setHilos(hils||[]); setRespuestas(respMap);
-
-    // Actividad reciente: mezclar reseñas, comentarios, hilos y respuestas
     const actividad=[];
     (revs||[]).slice(0,10).forEach((r)=>{ const p=(profs||[]).find(x=>x.id===r.profesor_id); actividad.push({tipo:"reseña",texto:`Reseña de ${p?.nombre||""}`,sub:r.materia,ts:r.created_at,profId:r.profesor_id,username:r.username}); });
     (coms||[]).slice(0,5).forEach((c)=>{ actividad.push({tipo:"comentario",texto:`Comentario de @${c.username}`,ts:c.created_at,username:c.username}); });
@@ -328,15 +325,15 @@ export default function App() {
   }
 
   function openChat(userPerfil) {
-  if (!perfil) {
-    setUsernameInput(randomUsername());
-    setShowUsernameModal(true);
-    return;
+    if(!perfil) {
+      setUsernameInput(randomUsername());
+      setShowUsernameModal(true);
+      return;
+    }
+    setChatWith(userPerfil);
+    setView("mensajes");
+    markAsRead(userPerfil.id);
   }
-  setChatWith(userPerfil);
-  setView("mensajes");
-  markAsRead(userPerfil.id);
-}
 
   function getConversations() {
     if(!session) return [];
@@ -429,8 +426,51 @@ export default function App() {
   function openUserProfile(userId) { if(!session){setShowAuthModal(true);return;} const p=perfilesMap[userId]; if(p){setViewingUser(p);setView("perfil-usuario");setCurrentProf(null);} }
   function navigate(v) { setView(v); setCurrentProf(null); setCurrentMateria(null); setSearch(""); setChatWith(null); setCurrentHilo(null); }
 
-  const allRevenas=Object.values(resenas).flat();
-  const depts=[...new Set(profesores.map((p)=>p.departamento))].sort();
+  function openReview(prof,reviewToEdit=null) {
+    if(session&&!perfil){setUsernameInput(randomUsername());setShowUsernameModal(true);return;}
+    setCurrentProf(prof); setEditingReview(reviewToEdit);
+    if(reviewToEdit){setRevMateria(reviewToEdit.materia);setRevModalidad(reviewToEdit.modalidad||"Presencial");setSelectedStar(reviewToEdit.rating);setSelectedTags(reviewToEdit.tags||[]);setRevText(reviewToEdit.texto);}
+    else{setRevMateria((prof.materias||[])[0]||materias[0]?.nombre||"");setSelectedStar(0);setSelectedTags([]);setRevText("");setRevModalidad("Presencial");}
+    setGuestEmail(""); setShowReviewModal(true);
+  }
+
+  async function submitReview() {
+    if(!selectedStar){alert("Por favor seleccioná una calificación");return;}
+    if(!revText.trim()){alert("Por favor escribí tu opinión");return;}
+    setSubmitting(true);
+    if(editingReview){await supabase.from("resenas").update({materia:revMateria,rating:selectedStar,texto:revText.trim(),tags:selectedTags,modalidad:revModalidad}).eq("id",editingReview.id);}
+    else{
+      const userEmail=session?session.user.email:guestEmail.trim();
+      await supabase.from("resenas").insert({profesor_id:currentProf.id,materia:revMateria,rating:selectedStar,texto:revText.trim(),tags:selectedTags,modalidad:revModalidad,user_email:userEmail,verified:isUP(userEmail),is_guest:!session,user_id:session?.user?.id||null,username:perfil?.username||null});
+    }
+    await fetchAll(); setShowReviewModal(false); setSubmitting(false); setEditingReview(null);
+    setSelectedStar(0); setSelectedTags([]); setRevText(""); setRevModalidad("Presencial"); setGuestEmail("");
+  }
+
+  async function deleteReview(reviewId) { if(!confirm("¿Querés eliminar esta reseña?")) return; await supabase.from("resenas").delete().eq("id",reviewId); await fetchAll(); }
+
+  async function addNuevaMateria() {
+    if(!nuevaMateria.trim()) return;
+    const {data}=await supabase.from("materias").insert({nombre:nuevaMateria.trim()}).select().single();
+    if(data){setMaterias((prev)=>[...prev,data].sort((a,b)=>a.nombre.localeCompare(b.nombre)));setNewMaterias((prev)=>[...prev,data.nombre]);}
+    setNuevaMateria(""); setShowNewMateriaField(false);
+  }
+
+  async function addNuevaMateriaDirecta() {
+    if(!nuevaMateriaDirecta.trim()) return;
+    await supabase.from("materias").insert({nombre:nuevaMateriaDirecta.trim()});
+    await fetchAll(); setNuevaMateriaDirecta(""); setShowAddMateriaModal(false);
+  }
+
+  async function addProf() {
+    if(!newNombre.trim()||!newDept.trim()){alert("Completá nombre y área");return;}
+    if(newMaterias.length===0){alert("Seleccioná al menos una materia");return;}
+    setSubmitting(true);
+    await supabase.from("profesores").insert({nombre:newNombre.trim(),departamento:newDept.trim(),materias:newMaterias});
+    await fetchAll(); setShowAddProfModal(false); setSubmitting(false); setNewNombre(""); setNewDept(""); setNewMaterias([]);
+  }
+
+  function toggleNewMateria(nombre){setNewMaterias((prev)=>prev.includes(nombre)?prev.filter((x)=>x!==nombre):[...prev,nombre]);}
 
   function getSortedFilteredRevs(revsList) {
     let list=[...revsList];
@@ -457,7 +497,6 @@ export default function App() {
       if(currentMateria) return (p.materias||[]).includes(currentMateria)&&dMatch;
       return match&&dMatch;
     });
-    // Sort by most recent review
     return list.map((p)=>{
       let revs=resenas[p.id]||[];
       if(modalidadFilter) revs=revs.filter((r)=>r.modalidad===modalidadFilter);
@@ -465,8 +504,8 @@ export default function App() {
       return {...p,avg:avgRating(revs),cnt:revs.length,lastRev};
     }).sort((a,b)=>{
       if(profTab==="mejor") return b.avg-a.avg;
-      if(profTab==="recientes") return b.cnt-a.cnt;
-      return b.lastRev-a.lastRev; // default: most recent activity
+      if(profTab==="todos") return b.cnt-a.cnt;
+      return b.lastRev-a.lastRev;
     });
   }
 
@@ -480,6 +519,8 @@ export default function App() {
     }).sort((a,b)=>b.lastRev-a.lastRev);
   }
 
+  const allRevenas=Object.values(resenas).flat();
+  const depts=[...new Set(profesores.map((p)=>p.departamento))].sort();
   const profRevs=currentProf?(resenas[currentProf.id]||[]):[];
   const sortedProfRevs=getSortedFilteredRevs(profRevs);
   const tagCounts={};
@@ -493,48 +534,6 @@ export default function App() {
   const conversations=getConversations();
   const chatMessages=getChatMessages();
   const hilosFiltrados=foroCat?hilos.filter((h)=>h.categoria===foroCat):hilos;
-
-  function openReview(prof,reviewToEdit=null) {
-    setCurrentProf(prof); setEditingReview(reviewToEdit);
-    if(reviewToEdit){setRevMateria(reviewToEdit.materia);setRevModalidad(reviewToEdit.modalidad||"Presencial");setSelectedStar(reviewToEdit.rating);setSelectedTags(reviewToEdit.tags||[]);setRevText(reviewToEdit.texto);}
-    else{setRevMateria((prof.materias||[])[0]||materias[0]?.nombre||"");setSelectedStar(0);setSelectedTags([]);setRevText("");setRevModalidad("Presencial");}
-    if (session && !perfil) { setUsernameInput(randomUsername()); setShowUsernameModal(true); return; }
-    setGuestEmail(""); setShowReviewModal(true);
-  }
-
-  async function submitReview() {
-    if(!selectedStar){alert("Por favor seleccioná una calificación");return;}
-    if(!revText.trim()){alert("Por favor escribí tu opinión");return;}
-    setSubmitting(true);
-    if(editingReview){await supabase.from("resenas").update({materia:revMateria,rating:selectedStar,texto:revText.trim(),tags:selectedTags,modalidad:revModalidad}).eq("id",editingReview.id);}
-    else{
-      const userEmail=session?session.user.email:guestEmail.trim();
-      await supabase.from("resenas").insert({profesor_id:currentProf.id,materia:revMateria,rating:selectedStar,texto:revText.trim(),tags:selectedTags,modalidad:revModalidad,user_email:userEmail,verified:isUP(userEmail),is_guest:!session,user_id:session?.user?.id||null,username:perfil?.username||null});
-    }
-    await fetchAll(); setShowReviewModal(false); setSubmitting(false); setEditingReview(null);
-    setSelectedStar(0); setSelectedTags([]); setRevText(""); setRevModalidad("Presencial"); setGuestEmail("");
-  }
-
-  async function deleteReview(reviewId) { if(!confirm("¿Querés eliminar esta reseña?")) return; await supabase.from("resenas").delete().eq("id",reviewId); await fetchAll(); }
-  async function addNuevaMateria() {
-    if(!nuevaMateria.trim()) return;
-    const {data}=await supabase.from("materias").insert({nombre:nuevaMateria.trim()}).select().single();
-    if(data){setMaterias((prev)=>[...prev,data].sort((a,b)=>a.nombre.localeCompare(b.nombre)));setNewMaterias((prev)=>[...prev,data.nombre]);}
-    setNuevaMateria(""); setShowNewMateriaField(false);
-  }
-  async function addNuevaMateriaDirecta() {
-    if(!nuevaMateriaDirecta.trim()) return;
-    await supabase.from("materias").insert({nombre:nuevaMateriaDirecta.trim()});
-    await fetchAll(); setNuevaMateriaDirecta(""); setShowAddMateriaModal(false);
-  }
-  async function addProf() {
-    if(!newNombre.trim()||!newDept.trim()){alert("Completá nombre y área");return;}
-    if(newMaterias.length===0){alert("Seleccioná al menos una materia");return;}
-    setSubmitting(true);
-    await supabase.from("profesores").insert({nombre:newNombre.trim(),departamento:newDept.trim(),materias:newMaterias});
-    await fetchAll(); setShowAddProfModal(false); setSubmitting(false); setNewNombre(""); setNewDept(""); setNewMaterias([]);
-  }
-  function toggleNewMateria(nombre){setNewMaterias((prev)=>prev.includes(nombre)?prev.filter((x)=>x!==nombre):[...prev,nombre]);}
 
   function renderReviewCard(r,showProf=false) {
     const isOwner=session&&r.user_id===session.user.id;
@@ -611,7 +610,6 @@ export default function App() {
 
   return (
     <div className="layout">
-      {/* SIDEBAR */}
       <div className="sidebar">
         <div className="sidebar-logo">
           <div className="sidebar-logo-row">
@@ -622,7 +620,6 @@ export default function App() {
             </div>
           </div>
         </div>
-
         <div className="sidebar-section">
           <div className="sidebar-section-title">Explorar</div>
           {[["materias","📚","Materias"],["profesores","👨‍🏫","Profesores"],["foro","💬","Foro"],["comunidad","👥","Comunidad"],["acerca","ℹ️","Acerca de"]].map(([v,icon,label])=>(
@@ -631,7 +628,6 @@ export default function App() {
             </button>
           ))}
         </div>
-
         {session&&<div className="sidebar-section">
           <div className="sidebar-section-title">Mi actividad</div>
           {[["mensajes","✉️","Mensajes",unreadCount],["mis-resenas","✍️","Mis reseñas",0],["mis-comentarios","💬","Mis comentarios",0],["resenas-votadas","👍","Reseñas votadas",0]].map(([v,icon,label,badge])=>(
@@ -641,7 +637,6 @@ export default function App() {
             </button>
           ))}
         </div>}
-
         <div className="sidebar-section">
           <div className="sidebar-section-title">Actividad reciente</div>
           {actividadReciente.slice(0,6).map((a,i)=>(
@@ -657,7 +652,6 @@ export default function App() {
             </button>
           ))}
         </div>
-
         <div className="sidebar-bottom">
           {session?(
             <div>
@@ -673,11 +667,9 @@ export default function App() {
         </div>
       </div>
 
-      {/* MAIN */}
       <div className="main-content">
         <div className="inner">
-
-          {currentProf ? (
+          {currentProf?(
             <>
               <div className="detail-topbar">
                 <button className="back-btn" onClick={()=>setCurrentProf(null)}>← Volver</button>
@@ -685,7 +677,7 @@ export default function App() {
               </div>
               {(()=>{
                 const idx=profesores.findIndex((x)=>x.id===currentProf.id);
-                const c=colorFor(idx); const avg=avgRating(sortedProfRevs); const summary=aiSummary(currentProf,profRevs);
+                const c=colorFor(idx); const avg=avgRating(profRevs); const summary=aiSummary(currentProf,profRevs);
                 return (<>
                   <div className="detail-header">
                     <div className="detail-avatar" style={{background:c.bg,color:c.color}}>{currentProf.foto_url?<img src={currentProf.foto_url} alt={currentProf.nombre}/>:initials(currentProf.nombre)}</div>
@@ -696,11 +688,9 @@ export default function App() {
                     </div>
                   </div>
                   <div className="modalidad-tabs">{[["","Todas"],["Presencial","Presencial"],["Online","Online"]].map(([k,l])=><button key={k} className={`modalidad-tab${detailModalidad===k?" active":""}`} onClick={()=>setDetailModalidad(k)}>{l}</button>)}</div>
-                  <div className="stats-row">{[[avgRating(profRevs)?avgRating(profRevs).toFixed(1):"—","calificación",avgRating(profRevs)?ratingColor(avgRating(profRevs)):undefined],[profRevs.length,"reseñas",undefined],[(currentProf.materias||[]).length,"materias",undefined]].map(([v,l,col],i)=><div key={i} className="stat-card"><div className="stat-val" style={col?{color:col}:{}}>{v}</div><div className="stat-lbl">{l}</div></div>)}</div>
+                  <div className="stats-row">{[[avg?avg.toFixed(1):"—","calificación",avg?ratingColor(avg):undefined],[profRevs.length,"reseñas",undefined],[(currentProf.materias||[]).length,"materias",undefined]].map(([v,l,col],i)=><div key={i} className="stat-card"><div className="stat-val" style={col?{color:col}:{}}>{v}</div><div className="stat-lbl">{l}</div></div>)}</div>
                   {topTags.length>0&&<div className="tags" style={{marginBottom:"1.25rem"}}>{topTags.map(([t,n])=><span key={t} className={`tag ${tagClass(t)}`}>{t} <span style={{opacity:0.6}}>({n})</span></span>)}</div>}
                   {summary&&<div className="ai-summary"><div className="ai-label">✦ Resumen IA</div>{summary}</div>}
-
-                  {/* Sort & filter controls */}
                   <div className="review-controls">
                     <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
                       <span style={{fontSize:12,color:"#888"}}>Ordenar:</span>
@@ -715,24 +705,20 @@ export default function App() {
                       ))}
                     </div>
                   </div>
-
-                  <div className="section-title" style={{marginTop:"1rem"}}>
-                    Reseñas {detailModalidad?`· ${detailModalidad}`:""}<span style={{fontWeight:400,color:"#aaa",fontSize:13}}> {sortedProfRevs.length} en total</span>
-                  </div>
-                  {sortedProfRevs.length===0&&<div className="empty">No hay reseñas que coincidan con los filtros</div>}
+                  <div className="section-title" style={{marginTop:"1rem"}}>Reseñas {detailModalidad?`· ${detailModalidad}`:""}<span style={{fontWeight:400,color:"#aaa",fontSize:13}}> {sortedProfRevs.length} en total</span></div>
+                  {sortedProfRevs.length===0&&<div className="empty">No hay reseñas que coincidan</div>}
                   {sortedProfRevs.map((r)=>renderReviewCard(r))}
                   <button className="add-review-btn" onClick={()=>openReview(currentProf)}>✎ Agregar mi reseña</button>
                 </>);
               })()}
             </>
-
-          ) : view==="foro" ? (
+          ):view==="foro"?(
             <>
               <div className="header">
                 <div><div className="logo"><div className="dot"/>Foro</div></div>
                 {session&&<button className="btn-outline" onClick={()=>setShowNewHiloModal(true)}>+ Nuevo hilo</button>}
               </div>
-              {currentHilo ? (
+              {currentHilo?(
                 <>
                   <button className="back-btn" style={{marginBottom:"1rem"}} onClick={()=>setCurrentHilo(null)}>← Volver al foro</button>
                   <div className="hilo-header">
@@ -765,7 +751,7 @@ export default function App() {
                     <button className="btn-primary" style={{flex:"none",padding:"8px 16px"}} onClick={submitRespuesta}>Responder</button>
                   </div>:<div className="comment-login-hint" style={{marginTop:"1rem"}}><button className="link-btn" onClick={()=>{setShowAuthModal(true);setAuthMode("login");}}>Iniciá sesión</button> para responder.</div>}
                 </>
-              ) : (
+              ):(
                 <>
                   <div className="cat-filter-row">
                     <button className={`cat-filter-btn${!foroCat?" active":""}`} onClick={()=>setForoCat("")}>Todos</button>
@@ -794,8 +780,7 @@ export default function App() {
                 </>
               )}
             </>
-
-          ) : view==="acerca" ? (
+          ):view==="acerca"?(
             <div className="about-page">
               <div className="about-hero">
                 <img src={UP_LOGO} alt="Universidad de Palermo" className="about-logo-img" onError={(e)=>e.target.style.display="none"}/>
@@ -806,8 +791,7 @@ export default function App() {
               <div className="about-section"><h3>Valores</h3><p>Fomentamos la honestidad y la objetividad. Una buena reseña no solo critica o elogia — describe experiencias reales que ayudan a otros. Pedimos a todos los usuarios que sean respetuosos y constructivos en sus opiniones.</p></div>
               <div className="about-contact"><h3>📬 Contacto</h3><p>¿Tenés sugerencias, encontraste un error o necesitás asistencia? Escribinos a:<br/><br/><a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a><br/><br/>Leemos todos los mensajes y respondemos a la brevedad.</p></div>
             </div>
-
-          ) : view==="perfil-usuario"&&viewingUser ? (
+          ):view==="perfil-usuario"&&viewingUser?(
             <>
               <button className="back-btn" style={{marginBottom:"1.25rem"}} onClick={()=>{setView("comunidad");setViewingUser(null);}}>← Volver</button>
               <div className="profile-header">
@@ -831,8 +815,7 @@ export default function App() {
               {allRevenas.filter((r)=>r.user_id===viewingUser.id).length===0&&<div className="empty">Sin reseñas todavía</div>}
               {allRevenas.filter((r)=>r.user_id===viewingUser.id).map((r)=>renderReviewCard(r,true))}
             </>
-
-          ) : view==="mensajes" ? (
+          ):view==="mensajes"?(
             <>
               <div style={{marginBottom:"1.25rem"}}><div className="logo"><div className="dot"/>Mensajes</div></div>
               {!session?<div className="empty"><button className="link-btn" onClick={()=>{setShowAuthModal(true);setAuthMode("login");}}>Iniciá sesión</button> para ver tus mensajes.</div>
@@ -861,33 +844,34 @@ export default function App() {
                 <>
                   {conversations.length===0&&<div className="empty">No tenés conversaciones todavía.</div>}
                   <div className="conversations-list">
-{conversations.map((conv)=>{const op=perfilesMap[conv.otherId]||{username:"Usuario",foto_url:null,carrera:null,id:conv.otherId};                      <div key={conv.otherId} className={`conversation-item${conv.unread>0?" unread":""}`} onClick={()=>openChat(op)}>
-                        <Avatar url={op.foto_url} name={op.username} size={40} fontSize={14}/>
-                        <div className="conv-info"><div className="conv-username">@{op.username}</div><div className="conv-preview">{mine?"Vos: ":""}{conv.lastMsg.texto}</div></div>
-                        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
-                          <span className="conv-time">{timeAgo(conv.lastMsg.created_at)}</span>
-                          {conv.unread>0&&<span className="sidebar-badge">{conv.unread}</span>}
+                    {conversations.map((conv)=>{
+                      const op=perfilesMap[conv.otherId]||{username:"Usuario",foto_url:null,carrera:null,id:conv.otherId};
+                      const mine=conv.lastMsg.de_user_id===session.user.id;
+                      return(
+                        <div key={conv.otherId} className={`conversation-item${conv.unread>0?" unread":""}`} onClick={()=>openChat(op)}>
+                          <Avatar url={op.foto_url} name={op.username} size={40} fontSize={14}/>
+                          <div className="conv-info"><div className="conv-username">@{op.username}</div><div className="conv-preview">{mine?"Vos: ":""}{conv.lastMsg.texto}</div></div>
+                          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+                            <span className="conv-time">{timeAgo(conv.lastMsg.created_at)}</span>
+                            {conv.unread>0&&<span className="sidebar-badge">{conv.unread}</span>}
+                          </div>
                         </div>
-                      </div>
-                    );}}}
+                      );
+                    })}
                   </div>
                 </>
               )}
             </>
-
-          ) : view==="mis-resenas" ? (
+          ):view==="mis-resenas"?(
             <><div className="section-title" style={{marginBottom:"1rem"}}>Mis reseñas <span style={{fontWeight:400,color:"#aaa",fontSize:13}}>{myReviews.length} en total</span></div>
             {myReviews.length===0?<div className="empty">Todavía no dejaste ninguna reseña</div>:myReviews.map((r)=>renderReviewCard(r,true))}</>
-
-          ) : view==="mis-comentarios" ? (
+          ):view==="mis-comentarios"?(
             <><div className="section-title" style={{marginBottom:"1rem"}}>Mis comentarios <span style={{fontWeight:400,color:"#aaa",fontSize:13}}>{myComments.length} en total</span></div>
             {myComments.length===0?<div className="empty">Todavía no comentaste ninguna reseña</div>:<div style={{display:"flex",flexDirection:"column",gap:8}}>{myComments.map((c)=>{const r=allRevenas.find((x)=>x.id===c.resena_id);const prof=r?profesores.find((p)=>p.id===r.profesor_id):null;return<div key={c.id} className="review-card">{prof&&<div style={{fontSize:12,color:"#888",marginBottom:6}}>{prof.nombre} · {r.materia}</div>}<div style={{fontSize:13,color:"#555"}}>{c.texto}</div><div style={{fontSize:11,color:"#aaa",marginTop:4}}>{new Date(c.created_at).toLocaleDateString("es-AR",{month:"short",year:"numeric"})}</div></div>;})}</div>}</>
-
-          ) : view==="resenas-votadas" ? (
+          ):view==="resenas-votadas"?(
             <><div className="section-title" style={{marginBottom:"1rem"}}>Reseñas votadas <span style={{fontWeight:400,color:"#aaa",fontSize:13}}>{myVotedReviews.length}</span></div>
             {myVotedReviews.length===0?<div className="empty">Todavía no votaste ninguna reseña</div>:myVotedReviews.map((r)=>renderReviewCard(r,true))}</>
-
-          ) : view==="comunidad" ? (
+          ):view==="comunidad"?(
             <>
               <div className="header"><div><div className="logo"><div className="dot"/>Comunidad</div></div><div style={{display:"flex",gap:8}}><button className="btn-outline" onClick={()=>setShowAddMateriaModal(true)}>+ Materia</button><button className="btn-outline" onClick={()=>setShowAddProfModal(true)}>+ Profesor</button></div></div>
               {!session?<div className="empty"><button className="link-btn" onClick={()=>{setShowAuthModal(true);setAuthMode("login");}}>Iniciá sesión</button> para ver los perfiles.</div>:<div className="users-list">{Object.values(perfilesMap).map((p)=>(
@@ -898,8 +882,7 @@ export default function App() {
                 </div>
               ))}</div>}
             </>
-
-          ) : view==="profesores" ? (
+          ):view==="profesores"?(
             <>
               <div className="header"><div><div className="logo"><div className="dot"/>Profesores</div></div><div style={{display:"flex",gap:8}}><button className="btn-outline" onClick={()=>setShowAddMateriaModal(true)}>+ Materia</button><button className="btn-outline" onClick={()=>setShowAddProfModal(true)}>+ Profesor</button></div></div>
               <div className="search-bar">
@@ -921,9 +904,7 @@ export default function App() {
                 );})}
               </div>}
             </>
-
-          ) : (
-            // MATERIAS VIEW
+          ):(
             <>
               <div className="header"><div><div className="logo"><div className="dot"/>Materias</div></div><div style={{display:"flex",gap:8}}><button className="btn-outline" onClick={()=>setShowAddMateriaModal(true)}>+ Materia</button><button className="btn-outline" onClick={()=>setShowAddProfModal(true)}>+ Profesor</button></div></div>
               <div className="search-bar"><input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Buscar materia..."/></div>
@@ -966,7 +947,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* USERNAME MODAL */}
       {showUsernameModal&&<div className="modal-overlay" onClick={()=>setShowUsernameModal(false)}><div className="modal" onClick={(e)=>e.stopPropagation()}>
         <div className="modal-title">Elegí tu nombre en ProfeScore</div>
         <div className="info-box">Este nombre es solo para identificarte. No tiene por qué ser tu nombre real.</div>
@@ -976,26 +956,23 @@ export default function App() {
         <div className="modal-actions"><button className="btn-cancel" onClick={()=>setShowUsernameModal(false)}>Cancelar</button><button className="btn-primary" onClick={saveUsername}>Confirmar nombre</button></div>
       </div></div>}
 
-      {/* EDIT PROFILE MODAL */}
       {showEditProfileModal&&<div className="modal-overlay" onClick={()=>setShowEditProfileModal(false)}><div className="modal" onClick={(e)=>e.stopPropagation()}>
         <div className="modal-title">Editar perfil</div>
-        <div className="form-group"><label className="form-label">URL de foto de perfil</label><input value={editFotoUrl} onChange={(e)=>setEditFotoUrl(e.target.value)} placeholder="https://i.imgur.com/tu-foto.jpg"/>{editFotoUrl&&<img src={editFotoUrl} alt="preview" className="foto-preview" onError={(e)=>e.target.style.display="none"}/>}<div style={{fontSize:11,color:"#888",marginTop:4}}>Podés subir tu foto a <a href="https://imgur.com" target="_blank" rel="noreferrer" style={{color:"#1D9E75"}}>imgur.com</a> y pegar el link directo.</div></div>
+        <div className="form-group"><label className="form-label">URL de foto de perfil</label><input value={editFotoUrl} onChange={(e)=>setEditFotoUrl(e.target.value)} placeholder="https://i.imgur.com/tu-foto.jpg"/>{editFotoUrl&&<img src={editFotoUrl} alt="preview" className="foto-preview" onError={(e)=>e.target.style.display="none"}/>}<div style={{fontSize:11,color:"#888",marginTop:4}}>Subí tu foto a <a href="https://imgur.com" target="_blank" rel="noreferrer" style={{color:"#1D9E75"}}>imgur.com</a> y pegá el link directo.</div></div>
         <div className="form-group"><label className="form-label">Carrera</label><select value={editCarrera} onChange={(e)=>setEditCarrera(e.target.value)}><option value="">Sin especificar</option>{CARRERAS.map((c)=><option key={c} value={c}>{c}</option>)}</select></div>
         <div className="form-group"><label className="form-label">Sobre mí</label><textarea value={editDescripcion} onChange={(e)=>setEditDescripcion(e.target.value)} placeholder="Contá algo sobre vos..."/></div>
         <div className="modal-actions"><button className="btn-cancel" onClick={()=>setShowEditProfileModal(false)}>Cancelar</button><button className="btn-primary" onClick={saveProfile}>Guardar</button></div>
       </div></div>}
 
-      {/* EDIT PROF FOTO */}
       {showEditProfFotoModal&&<div className="modal-overlay" onClick={()=>setShowEditProfFotoModal(false)}><div className="modal" onClick={(e)=>e.stopPropagation()}>
         <div className="modal-title">Foto de {editingProfFoto?.nombre}</div>
         <div className="form-group"><label className="form-label">URL de la foto</label><input value={profFotoUrl} onChange={(e)=>setProfFotoUrl(e.target.value)} placeholder="https://i.imgur.com/foto.jpg"/>{profFotoUrl&&<img src={profFotoUrl} alt="preview" className="foto-preview" onError={(e)=>e.target.style.display="none"}/>}</div>
         <div className="modal-actions"><button className="btn-cancel" onClick={()=>setShowEditProfFotoModal(false)}>Cancelar</button><button className="btn-primary" onClick={saveProfFoto}>Guardar</button></div>
       </div></div>}
 
-      {/* AUTH MODAL */}
       {showAuthModal&&<div className="modal-overlay" onClick={()=>setShowAuthModal(false)}><div className="modal" onClick={(e)=>e.stopPropagation()}>
         <div className="modal-title">{authMode==="login"?"Iniciar sesión":"Crear cuenta"}</div>
-        {authMode==="register"&&<><div className="info-box">Si usás tu email <strong>@up.edu.ar</strong>, tus reseñas tendrán el badge <span className="badge-up">✓ Alumno UP</span></div><div className="info-box warning">⚠️ No uses una contraseña que tengas en otras cuentas. Usá una contraseña única para esta plataforma.</div></>}
+        {authMode==="register"&&<><div className="info-box">Si usás tu email <strong>@up.edu.ar</strong>, tus reseñas tendrán el badge <span className="badge-up">✓ Alumno UP</span></div><div className="info-box warning">⚠️ No uses una contraseña que tengas en otras cuentas. Usá una contraseña única.</div></>}
         <div className="form-group"><label className="form-label">Email</label><input type="email" value={authEmail} onChange={(e)=>setAuthEmail(e.target.value)} placeholder="tu@email.com"/></div>
         <div className="form-group"><label className="form-label">Contraseña</label><input type="password" value={authPassword} onChange={(e)=>setAuthPassword(e.target.value)} placeholder="Mínimo 6 caracteres"/></div>
         {authMsg&&<div className={`auth-msg${authMsg.includes("Revisá")?" success":""}`}>{authMsg}</div>}
@@ -1004,7 +981,6 @@ export default function App() {
         <div className="auth-switch">{authMode==="login"?<>¿No tenés cuenta? <button onClick={()=>{setAuthMode("register");setAuthMsg("");}}>Registrate</button></>:<>¿Ya tenés cuenta? <button onClick={()=>{setAuthMode("login");setAuthMsg("");}}>Iniciá sesión</button></>}</div>
       </div></div>}
 
-      {/* NEW HILO MODAL */}
       {showNewHiloModal&&<div className="modal-overlay" onClick={()=>setShowNewHiloModal(false)}><div className="modal" onClick={(e)=>e.stopPropagation()}>
         <div className="modal-title">Nuevo hilo de discusión</div>
         <div className="form-group"><label className="form-label">Categoría</label><select value={hiloCat} onChange={(e)=>setHiloCat(e.target.value)}>{CATEGORIAS_FORO.map((c)=><option key={c} value={c}>{c}</option>)}</select></div>
@@ -1013,7 +989,6 @@ export default function App() {
         <div className="modal-actions"><button className="btn-cancel" onClick={()=>setShowNewHiloModal(false)}>Cancelar</button><button className="btn-primary" onClick={submitHilo} disabled={submitting}>{submitting?"Publicando...":"Publicar hilo"}</button></div>
       </div></div>}
 
-      {/* REVIEW MODAL */}
       {showReviewModal&&<div className="modal-overlay" onClick={()=>setShowReviewModal(false)}><div className="modal" onClick={(e)=>e.stopPropagation()}>
         <div className="modal-title">{editingReview?"Editar reseña":"Agregar reseña"}</div>
         {!editingReview&&<div className="disclaimer-box">⚠️ {DISCLAIMER}</div>}
@@ -1031,14 +1006,12 @@ export default function App() {
         <div className="modal-actions"><button className="btn-cancel" onClick={()=>setShowReviewModal(false)}>Cancelar</button><button className="btn-primary" onClick={submitReview} disabled={submitting}>{submitting?"Guardando...":editingReview?"Guardar cambios":"Publicar reseña"}</button></div>
       </div></div>}
 
-      {/* ADD MATERIA */}
       {showAddMateriaModal&&<div className="modal-overlay" onClick={()=>setShowAddMateriaModal(false)}><div className="modal" onClick={(e)=>e.stopPropagation()}>
         <div className="modal-title">Agregar materia</div>
         <div className="form-group"><label className="form-label">Nombre</label><input value={nuevaMateriaDirecta} onChange={(e)=>setNuevaMateriaDirecta(e.target.value)} placeholder="Ej: Derecho Laboral"/></div>
         <div className="modal-actions"><button className="btn-cancel" onClick={()=>setShowAddMateriaModal(false)}>Cancelar</button><button className="btn-primary" onClick={addNuevaMateriaDirecta}>Agregar</button></div>
       </div></div>}
 
-      {/* ADD PROF */}
       {showAddProfModal&&<div className="modal-overlay" onClick={()=>setShowAddProfModal(false)}><div className="modal" onClick={(e)=>e.stopPropagation()}>
         <div className="modal-title">Agregar profesor</div>
         <div className="form-group"><label className="form-label">Nombre completo</label><input value={newNombre} onChange={(e)=>setNewNombre(e.target.value)} placeholder="Ej: Dra. Ana García"/></div>
