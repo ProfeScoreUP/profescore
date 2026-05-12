@@ -1,6 +1,4 @@
-:root {
-  --color-muted: #aaa;
-}
+:root { --color-muted: #aaa; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -38,6 +36,13 @@ body {
   background: #1D9E75;
 }
 
+.subtitle {
+  font-size: 12px;
+  color: #888;
+  margin-top: 2px;
+  margin-left: 18px;
+}
+
 .btn-outline {
   font-size: 13px;
   padding: 6px 14px;
@@ -46,6 +51,7 @@ body {
   background: white;
   cursor: pointer;
   color: #1a1a1a;
+  white-space: nowrap;
 }
 .btn-outline:hover { background: #f0f0f0; }
 
@@ -53,9 +59,11 @@ body {
   display: flex;
   gap: 8px;
   margin-bottom: 1.25rem;
+  flex-wrap: wrap;
 }
 .search-bar input {
   flex: 1;
+  min-width: 160px;
   padding: 9px 12px;
   border: 1px solid #ddd;
   border-radius: 8px;
@@ -144,6 +152,28 @@ body {
 .detail-name { font-size: 20px; font-weight: 600; }
 .detail-dept { font-size: 13px; color: #888; margin-top: 3px; }
 
+.modalidad-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 1.25rem;
+}
+.modalidad-tab {
+  padding: 5px 14px;
+  font-size: 12px;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  background: white;
+  cursor: pointer;
+  color: #888;
+  transition: all 0.15s;
+}
+.modalidad-tab.active {
+  background: #1D9E75;
+  color: white;
+  border-color: #1D9E75;
+  font-weight: 500;
+}
+
 .stats-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 1.25rem; }
 .stat-card { background: #f5f5f0; border-radius: 8px; padding: 12px; text-align: center; }
 .stat-val { font-size: 22px; font-weight: 600; }
@@ -162,11 +192,26 @@ body {
   background: #f9f9f7; border-radius: 8px;
   padding: 12px 14px; margin-bottom: 8px;
 }
-.review-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.review-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; flex-wrap: wrap; gap: 4px; }
 .review-materia { font-size: 12px; font-weight: 500; }
 .review-date { font-size: 11px; color: #aaa; }
 .review-text { font-size: 13px; color: #555; line-height: 1.5; }
 .stars { color: #BA7517; font-size: 13px; }
+
+.modalidad-badge {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  margin-left: 6px;
+  background: #E1F5EE;
+  color: #0F6E56;
+  font-weight: 500;
+  vertical-align: middle;
+}
+.modalidad-badge.online {
+  background: #E6F1FB;
+  color: #185FA5;
+}
 
 .add-review-btn {
   width: 100%; margin-top: 1rem;
@@ -178,21 +223,21 @@ body {
 
 .empty { text-align: center; padding: 2rem; color: #aaa; font-size: 14px; }
 
-
-
 .modal-overlay {
   position: fixed; inset: 0;
   background: rgba(0,0,0,0.45);
   display: flex; align-items: center; justify-content: center;
-  z-index: 100;
+  z-index: 100; padding: 1rem;
 }
 .modal {
   background: white; border-radius: 12px;
-  padding: 1.5rem; width: 90%; max-width: 480px;
+  padding: 1.5rem; width: 100%; max-width: 500px;
   border: 1px solid #e0e0e0;
+  max-height: 90vh; overflow-y: auto;
 }
 .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 1rem; }
 
+.form-row { display: flex; gap: 10px; }
 .form-group { margin-bottom: 14px; }
 .form-label { font-size: 12px; color: #888; margin-bottom: 5px; display: block; }
 .form-group input,
@@ -217,6 +262,18 @@ body {
   transition: all 0.1s;
 }
 .tag-option.selected { background: #E1F5EE; color: #085041; border-color: #5DCAA5; }
+
+.materia-picker {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 4px; max-height: 180px; overflow-y: auto;
+  padding: 4px;
+}
+
+.add-materia-btn {
+  margin-top: 8px; font-size: 12px; color: #1D9E75;
+  background: none; border: none; cursor: pointer; padding: 0;
+  text-decoration: underline;
+}
 
 .modal-actions { display: flex; gap: 8px; margin-top: 1rem; }
 .btn-primary {

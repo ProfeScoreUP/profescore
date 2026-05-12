@@ -16,20 +16,6 @@ const ALL_TAGS = [
   "Respondus","Buenas devoluciones","Comprometido","Oral difícil","Brinda apoyo","Muchas tareas","Buenas clases",
 ];
 
-const MATERIAS_UP = [
-  "Contabilidad I","Contabilidad II","Administración","Análisis Matemático I","Análisis Matemático II",
-  "Marketing","Tendencias Sociales","Microeconomía","Macroeconomía","Costos","Impuestos",
-  "Administración de Recursos Humanos","Comercio y Negocios Internacionales","Diseño de Organizaciones y Procesos",
-  "Comunicaciones Integradas de Marketing","Sistemas Integrados de Información",
-  "Ética, Responsabilidad Social y Medio Ambiente","Integración, Ambientación y Comunicación",
-  "Matemática Financiera","Producción y Servicios","Estructura Económica","Estadística I","Estadística II",
-  "Comportamiento Organizacional","Finanzas de Empresas","Derecho A","Derecho B",
-  "Gestión de la Producción","Fundamentos de Estrategia","Liderazgo y Negociación",
-  "Investigación e Innovación","Análisis de Estados Contables","Administración Estratégica",
-  "Proyectos de Inversión","Control de Gestión","Estrategias de Management Global",
-  "Ejercicio Profesional de la Administración",
-];
-
 function initials(name) {
   return name.split(" ").filter((w) => w.length > 2).slice(0, 2).map((w) => w[0]).join("");
 }
@@ -43,7 +29,7 @@ function ratingColor(r) {
   if (r >= 3) return "#BA7517";
   return "#E24B4A";
 }
-function stars(r) { return "★".repeat(Math.round(r)) + "☆".repeat(5 - Math.round(r)); }
+function starsStr(r) { return "★".repeat(Math.round(r)) + "☆".repeat(5 - Math.round(r)); }
 function tagClass(t) {
   const pos = ["Explica bien","Buena onda","Claro","Buenas devoluciones","Comprometido","Brinda apoyo","Buenas clases"];
   const neg = ["Aburrido","Oral difícil","Muchas tareas","Respondus"];
@@ -58,37 +44,47 @@ function aiSummary(prof, reviews) {
   reviews.forEach((r) => (r.tags || []).forEach((t) => (allTags[t] = (allTags[t] || 0) + 1)));
   const top = Object.entries(allTags).sort((a, b) => b[1] - a[1]).map(([t]) => t);
   const apellido = prof.nombre.split(" ").pop();
-  if (avg >= 4.5) return `Los estudiantes tienen una opinión muy positiva de ${apellido}. Es destacado por ser ${top.slice(0,2).join(" y ")}, con parciales que requieren estudio pero asequibles. Muy recomendado.`;
-  if (avg >= 3.5) return `${apellido} tiene buenas reseñas en general. Los estudiantes valoran que es ${top[0] || "accesible"}, aunque mencionan que la materia requiere dedicación.`;
-  if (avg >= 2.5) return `Las opiniones sobre ${apellido} son mixtas. Algunos estudiantes rescatan ${top[0] || "su conocimiento"}, pero otros señalan dificultades con la dinámica de clase.`;
-  return `La mayoría de los estudiantes tuvo dificultades con ${apellido}. Las reseñas mencionan ${top.slice(0,2).join(" y ")} como aspectos negativos recurrentes.`;
+  if (avg >= 4.5) return `Los estudiantes tienen una opinión muy positiva de ${apellido}. Destacado por ser ${top.slice(0,2).join(" y ")}. Muy recomendado.`;
+  if (avg >= 3.5) return `${apellido} tiene buenas reseñas. Los estudiantes valoran que es ${top[0] || "comprometido"}, aunque la materia requiere dedicación.`;
+  if (avg >= 2.5) return `Las opiniones sobre ${apellido} son mixtas. Algunos rescatan ${top[0] || "su conocimiento"}, pero otros señalan dificultades con la dinámica de clase.`;
+  return `La mayoría tuvo dificultades con ${apellido}. Las reseñas mencionan ${top.slice(0,2).join(" y ")} como aspectos negativos recurrentes.`;
 }
 
 export default function App() {
   const [profesores, setProfesores] = useState([]);
   const [resenas, setResenas] = useState({});
+  const [materias, setMaterias] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState("");
+  const [modalidadFilter, setModalidadFilter] = useState("");
   const [tab, setTab] = useState("todos");
   const [currentProf, setCurrentProf] = useState(null);
+  const [detailModalidad, setDetailModalidad] = useState("");
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [showAddProfModal, setShowAddProfModal] = useState(false);
   const [selectedStar, setSelectedStar] = useState(0);
   const [selectedTags, setSelectedTags] = useState([]);
   const [revText, setRevText] = useState("");
   const [revMateria, setRevMateria] = useState("");
+  const [revModalidad, setRevModalidad] = useState("Presencial");
   const [newNombre, setNewNombre] = useState("");
   const [newDept, setNewDept] = useState("");
-  const [newMaterias, setNewMaterias] = useState("");
+  const [newMaterias, setNewMaterias] = useState([]);
+  const [newMateriaInput, setNewMateriaInput] = useState("");
+  const [showNewMateriaField, setShowNewMateriaField] = useState(false);
+  const [nuevaMateria, setNuevaMateria] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => { fetchAll(); }, []);
 
   async function fetchAll() {
     setLoading(true);
-    const { data: profs } = await supabase.from("profesores").select("*").order("nombre");
-    const { data: revs } = await supabase.from("resenas").select("*").order("created_at", { ascending: false });
+    const [{ data: profs }, { data: revs }, { data: mats }] = await Promise.all([
+      supabase.from("profesores").select("*").order("nombre"),
+      supabase.from("resenas").select("*").order("created_at", { ascending: false }),
+      supabase.from("materias").select("*").order("nombre"),
+    ]);
     const resMap = {};
     (revs || []).forEach((r) => {
       if (!resMap[r.profesor_id]) resMap[r.profesor_id] = [];
@@ -96,6 +92,7 @@ export default function App() {
     });
     setProfesores(profs || []);
     setResenas(resMap);
+    setMaterias(mats || []);
     setLoading(false);
   }
 
@@ -106,46 +103,76 @@ export default function App() {
       const dMatch = !deptFilter || p.departamento === deptFilter;
       return match && dMatch;
     });
-    const withAvg = list.map((p) => ({ ...p, avg: avgRating(resenas[p.id] || []), cnt: (resenas[p.id] || []).length }));
+    const withAvg = list.map((p) => {
+      let revs = resenas[p.id] || [];
+      if (modalidadFilter) revs = revs.filter((r) => r.modalidad === modalidadFilter);
+      return { ...p, avg: avgRating(revs), cnt: revs.length };
+    });
+    if (modalidadFilter) {
+      // only show profs that have reviews in that modalidad, or all if none filtered
+    }
     if (tab === "mejor") withAvg.sort((a, b) => b.avg - a.avg);
     else if (tab === "recientes") withAvg.sort((a, b) => b.cnt - a.cnt);
     return withAvg;
   }
 
-  const depts = [...new Set(profesores.map((p) => p.departamento))];
+  const depts = [...new Set(profesores.map((p) => p.departamento))].sort();
 
   async function submitReview() {
     if (!selectedStar) { alert("Por favor seleccioná una calificación"); return; }
     if (!revText.trim()) { alert("Por favor escribí tu opinión"); return; }
     setSubmitting(true);
-    await supabase.from("resenas").insert({ profesor_id: currentProf.id, materia: revMateria, rating: selectedStar, texto: revText.trim(), tags: selectedTags });
+    await supabase.from("resenas").insert({
+      profesor_id: currentProf.id,
+      materia: revMateria,
+      rating: selectedStar,
+      texto: revText.trim(),
+      tags: selectedTags,
+      modalidad: revModalidad,
+    });
     await fetchAll();
     setShowReviewModal(false);
     setSubmitting(false);
-    setSelectedStar(0); setSelectedTags([]); setRevText("");
+    setSelectedStar(0); setSelectedTags([]); setRevText(""); setRevModalidad("Presencial");
+  }
+
+  async function addNuevaMateria() {
+    if (!nuevaMateria.trim()) return;
+    const { data } = await supabase.from("materias").insert({ nombre: nuevaMateria.trim() }).select().single();
+    if (data) {
+      setMaterias((prev) => [...prev, data].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+      setNewMaterias((prev) => [...prev, data.nombre]);
+    }
+    setNuevaMateria("");
+    setShowNewMateriaField(false);
   }
 
   async function addProf() {
-    if (!newNombre.trim() || !newDept.trim()) { alert("Completá nombre y departamento"); return; }
-    const mats = newMaterias.split(",").map((s) => s.trim()).filter(Boolean);
+    if (!newNombre.trim() || !newDept.trim()) { alert("Completá nombre y área"); return; }
+    if (newMaterias.length === 0) { alert("Seleccioná al menos una materia"); return; }
     setSubmitting(true);
-    await supabase.from("profesores").insert({ nombre: newNombre.trim(), departamento: newDept.trim(), materias: mats.length ? mats : [newDept.trim()] });
+    await supabase.from("profesores").insert({ nombre: newNombre.trim(), departamento: newDept.trim(), materias: newMaterias });
     await fetchAll();
     setShowAddProfModal(false);
     setSubmitting(false);
-    setNewNombre(""); setNewDept(""); setNewMaterias("");
+    setNewNombre(""); setNewDept(""); setNewMaterias([]); setNewMateriaInput("");
+  }
+
+  function toggleNewMateria(nombre) {
+    setNewMaterias((prev) => prev.includes(nombre) ? prev.filter((x) => x !== nombre) : [...prev, nombre]);
   }
 
   function openReview(prof) {
     setCurrentProf(prof);
-    setRevMateria((prof.materias || [])[0] || MATERIAS_UP[0]);
-    setSelectedStar(0); setSelectedTags([]); setRevText("");
+    setRevMateria((prof.materias || [])[0] || materias[0]?.nombre || "");
+    setSelectedStar(0); setSelectedTags([]); setRevText(""); setRevModalidad("Presencial");
     setShowReviewModal(true);
   }
 
   const profRevs = currentProf ? (resenas[currentProf.id] || []) : [];
+  const filteredProfRevs = detailModalidad ? profRevs.filter((r) => r.modalidad === detailModalidad) : profRevs;
   const tagCounts = {};
-  profRevs.forEach((r) => (r.tags || []).forEach((t) => (tagCounts[t] = (tagCounts[t] || 0) + 1)));
+  filteredProfRevs.forEach((r) => (r.tags || []).forEach((t) => (tagCounts[t] = (tagCounts[t] || 0) + 1)));
   const topTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
   return (
@@ -155,7 +182,7 @@ export default function App() {
           <div className="header">
             <div>
               <div className="logo"><div className="dot" />ProfeScore</div>
-              <div className="subtitle">Universidad de Palermo · Lic. en Administración</div>
+              <div className="subtitle">Universidad de Palermo</div>
             </div>
             <button className="btn-outline" onClick={() => setShowAddProfModal(true)}>+ Agregar profesor</button>
           </div>
@@ -164,6 +191,11 @@ export default function App() {
             <select value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)}>
               <option value="">Todas las áreas</option>
               {depts.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+            <select value={modalidadFilter} onChange={(e) => setModalidadFilter(e.target.value)}>
+              <option value="">Presencial y online</option>
+              <option value="Presencial">Presencial</option>
+              <option value="Online">Online</option>
             </select>
           </div>
           <div className="tabs">
@@ -176,17 +208,18 @@ export default function App() {
               {getFiltered().length === 0 && <div className="empty">No se encontraron profesores</div>}
               {getFiltered().map((p, i) => {
                 const c = colorFor(i);
-                const revs = resenas[p.id] || [];
+                let revs = resenas[p.id] || [];
+                if (modalidadFilter) revs = revs.filter((r) => r.modalidad === modalidadFilter);
                 const tagC = {};
                 revs.forEach((r) => (r.tags || []).forEach((t) => (tagC[t] = (tagC[t] || 0) + 1)));
                 const tTop = Object.entries(tagC).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([t])=>t);
                 return (
-                  <div key={p.id} className="prof-card" onClick={() => setCurrentProf(p)}>
+                  <div key={p.id} className="prof-card" onClick={() => { setCurrentProf(p); setDetailModalidad(""); }}>
                     <div className="prof-row">
                       <div className="avatar" style={{ background: c.bg, color: c.color }}>{initials(p.nombre)}</div>
                       <div className="prof-info">
                         <div className="prof-name">{p.nombre}</div>
-                        <div className="prof-meta">{p.departamento} · {revs.length} reseña{revs.length !== 1 ? "s" : ""}</div>
+                        <div className="prof-meta">{p.departamento} · {revs.length} reseña{revs.length !== 1 ? "s" : ""}{modalidadFilter ? ` ${modalidadFilter.toLowerCase()}` : ""}</div>
                         <div className="tags">{tTop.map((t) => <span key={t} className={`tag ${tagClass(t)}`}>{t}</span>)}</div>
                       </div>
                       <div className="rating-badge">
@@ -206,8 +239,8 @@ export default function App() {
           {(() => {
             const idx = profesores.findIndex((x) => x.id === currentProf.id);
             const c = colorFor(idx);
-            const avg = avgRating(profRevs);
-            const summary = aiSummary(currentProf, profRevs);
+            const avg = avgRating(filteredProfRevs);
+            const summary = aiSummary(currentProf, filteredProfRevs);
             return (
               <>
                 <div className="detail-header">
@@ -218,10 +251,17 @@ export default function App() {
                     <div className="tags" style={{ marginTop: 6 }}>{(currentProf.materias || []).map((m) => <span key={m} className="tag tag-blue">{m}</span>)}</div>
                   </div>
                 </div>
+
+                <div className="modalidad-tabs">
+                  {[["","Todas"],["Presencial","Presencial"],["Online","Online"]].map(([k,l]) => (
+                    <button key={k} className={`modalidad-tab${detailModalidad===k?" active":""}`} onClick={() => setDetailModalidad(k)}>{l}</button>
+                  ))}
+                </div>
+
                 <div className="stats-row">
                   {[
                     [avg ? avg.toFixed(1) : "—", "calificación", avg ? ratingColor(avg) : undefined],
-                    [profRevs.length, "reseñas", undefined],
+                    [filteredProfRevs.length, "reseñas", undefined],
                     [(currentProf.materias || []).length, "materias", undefined],
                   ].map(([v, l, col], i) => (
                     <div key={i} className="stat-card">
@@ -241,12 +281,19 @@ export default function App() {
                     {summary}
                   </div>
                 )}
-                <div className="section-title">Reseñas <span style={{ fontWeight: 400, color: "#aaa", fontSize: 13 }}>{profRevs.length} en total</span></div>
-                {profRevs.length === 0 && <div className="empty">Sé el primero en dejar una reseña</div>}
-                {profRevs.map((r) => (
+                <div className="section-title">
+                  Reseñas {detailModalidad ? `· ${detailModalidad}` : ""}
+                  <span style={{ fontWeight: 400, color: "#aaa", fontSize: 13 }}> {filteredProfRevs.length} en total</span>
+                </div>
+                {filteredProfRevs.length === 0 && <div className="empty">No hay reseñas{detailModalidad ? ` de modalidad ${detailModalidad.toLowerCase()}` : ""} todavía</div>}
+                {filteredProfRevs.map((r) => (
                   <div key={r.id} className="review-card">
                     <div className="review-top">
-                      <div><span className="review-materia">{r.materia}</span><span className="stars" style={{ marginLeft: 8 }}>{stars(r.rating)}</span></div>
+                      <div>
+                        <span className="review-materia">{r.materia}</span>
+                        <span className="stars" style={{ marginLeft: 8 }}>{starsStr(r.rating)}</span>
+                        <span className={`modalidad-badge${r.modalidad === "Online" ? " online" : ""}`}>{r.modalidad || "Presencial"}</span>
+                      </div>
                       <div className="review-date">{new Date(r.created_at).toLocaleDateString("es-AR", { month: "short", year: "numeric" })}</div>
                     </div>
                     <div className="review-text">{r.texto}</div>
@@ -264,11 +311,20 @@ export default function App() {
         <div className="modal-overlay" onClick={() => setShowReviewModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-title">Agregar reseña</div>
-            <div className="form-group">
-              <label className="form-label">Materia cursada</label>
-              <select value={revMateria} onChange={(e) => setRevMateria(e.target.value)}>
-                {(currentProf?.materias || MATERIAS_UP).map((m) => <option key={m}>{m}</option>)}
-              </select>
+            <div class="form-row">
+              <div className="form-group" style={{flex:1}}>
+                <label className="form-label">Materia cursada</label>
+                <select value={revMateria} onChange={(e) => setRevMateria(e.target.value)}>
+                  {(currentProf?.materias || []).map((m) => <option key={m}>{m}</option>)}
+                </select>
+              </div>
+              <div className="form-group" style={{flex:1}}>
+                <label className="form-label">Modalidad</label>
+                <select value={revModalidad} onChange={(e) => setRevModalidad(e.target.value)}>
+                  <option>Presencial</option>
+                  <option>Online</option>
+                </select>
+              </div>
             </div>
             <div className="form-group">
               <label className="form-label">Calificación</label>
@@ -279,7 +335,7 @@ export default function App() {
               </div>
             </div>
             <div className="form-group">
-              <label className="form-label">Tags (elegí hasta 4)</label>
+              <label className="form-label">Tags (hasta 4)</label>
               <div className="tag-picker">
                 {ALL_TAGS.map((t) => (
                   <span key={t} className={`tag-option${selectedTags.includes(t) ? " selected" : ""}`}
@@ -314,12 +370,33 @@ export default function App() {
               <input value={newDept} onChange={(e) => setNewDept(e.target.value)} placeholder="Ej: Contabilidad, Marketing..." />
             </div>
             <div className="form-group">
-              <label className="form-label">Materias que dicta (separadas por coma)</label>
-              <input value={newMaterias} onChange={(e) => setNewMaterias(e.target.value)} placeholder="Ej: Contabilidad I, Contabilidad II" />
+              <label className="form-label">Materias que dicta</label>
+              <div className="materia-picker">
+                {materias.map((m) => (
+                  <span key={m.id} className={`tag-option${newMaterias.includes(m.nombre) ? " selected" : ""}`}
+                    onClick={() => toggleNewMateria(m.nombre)}>
+                    {m.nombre}
+                  </span>
+                ))}
+              </div>
+              {!showNewMateriaField ? (
+                <button className="add-materia-btn" onClick={() => setShowNewMateriaField(true)}>+ Agregar materia que no está en la lista</button>
+              ) : (
+                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                  <input value={nuevaMateria} onChange={(e) => setNuevaMateria(e.target.value)} placeholder="Nombre de la materia..." style={{ flex: 1 }} />
+                  <button className="btn-primary" style={{ flex: "none", padding: "6px 12px" }} onClick={addNuevaMateria}>Agregar</button>
+                  <button className="btn-cancel" onClick={() => setShowNewMateriaField(false)}>✕</button>
+                </div>
+              )}
+              {newMaterias.length > 0 && (
+                <div style={{ marginTop: 8, fontSize: 12, color: "#0F6E56" }}>
+                  Seleccionadas: {newMaterias.join(", ")}
+                </div>
+              )}
             </div>
             <div className="modal-actions">
               <button className="btn-cancel" onClick={() => setShowAddProfModal(false)}>Cancelar</button>
-              <button className="btn-primary" onClick={addProf} disabled={submitting}>{submitting ? "Guardando..." : "Agregar"}</button>
+              <button className="btn-primary" onClick={addProf} disabled={submitting}>{submitting ? "Guardando..." : "Agregar profesor"}</button>
             </div>
           </div>
         </div>
