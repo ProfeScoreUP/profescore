@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { supabase } from "./supabase";
 import "./App.css";
 
+const ADMIN_ID = "bb0e6c4c-c4de-4679-b3bc-0bd318f2e5c1";
+
 const COLORS = [
   { bg: "#E1F5EE", color: "#085041" },
   { bg: "#E6F1FB", color: "#0C447C" },
@@ -36,29 +38,32 @@ const PREGUNTAS_PRESENCIAL = [
 
 const DISCLAIMER = "Recordá que una buena reseña ayuda a tus compañeros a tomar mejores decisiones. Intentá ser objetivo/a: una mala nota no siempre significa un mal profesor. Contá tu experiencia real.";
 
+const CARRERAS = [
+  "Lic. en Administración","Lic. en Economía","Lic. en Marketing","Lic. en Recursos Humanos",
+  "Lic. en Comercio Internacional","Lic. en Sistemas","Contador Público","Ing. Industrial",
+  "Lic. en Psicología","Lic. en Comunicación","Diseño Gráfico","Arquitectura","Abogacía","Otra",
+];
+
 const ADJ = ["Tigre","Luna","Viento","Piedra","Nube","Rio","Fuego","Hielo","Trueno","Bosque","Mar","Estrella","Rayo","Niebla","Selva","Pico","Lago","Ola","Bruma","Cima"];
 const SUST = ["Veloz","Nomade","Calmo","Sabio","Feroz","Libre","Sereno","Agil","Bravo","Fiero","Quieto","Audaz","Firme","Leve","Hondo","Vivo","Claro","Oscuro","Suave","Fuerte"];
 
 function randomUsername() {
-  const a = ADJ[Math.floor(Math.random() * ADJ.length)];
-  const s = SUST[Math.floor(Math.random() * SUST.length)];
-  return `${a}${s}`;
+  return ADJ[Math.floor(Math.random()*ADJ.length)] + SUST[Math.floor(Math.random()*SUST.length)];
 }
-
 function initials(name) {
-  return name.split(" ").filter((w) => w.length > 2).slice(0, 2).map((w) => w[0]).join("");
+  return name.split(" ").filter((w) => w.length > 2).slice(0,2).map((w) => w[0]).join("");
 }
 function colorFor(i) { return COLORS[i % COLORS.length]; }
 function avgRating(reviews) {
   if (!reviews.length) return 0;
-  return reviews.reduce((a, b) => a + b.rating, 0) / reviews.length;
+  return reviews.reduce((a,b) => a+b.rating, 0) / reviews.length;
 }
 function ratingColor(r) {
   if (r >= 4) return "#1D9E75";
   if (r >= 3) return "#BA7517";
   return "#E24B4A";
 }
-function starsStr(r) { return "★".repeat(Math.round(r)) + "☆".repeat(5 - Math.round(r)); }
+function starsStr(r) { return "★".repeat(Math.round(r))+"☆".repeat(5-Math.round(r)); }
 function tagClass(t) {
   const pos = ["Explica bien","Buena onda","Claro","Buenas devoluciones","Comprometido","Brinda apoyo","Buenas clases"];
   const neg = ["Aburrido","Oral difícil","Muchas tareas","Respondus"];
@@ -67,56 +72,79 @@ function tagClass(t) {
   return "tag-amber";
 }
 function isUP(email) { return email && email.endsWith("@up.edu.ar"); }
+function isAdmin(uid) { return uid === ADMIN_ID; }
 function aiSummary(prof, reviews) {
   if (!reviews.length) return "";
   const avg = avgRating(reviews);
   const allTags = {};
-  reviews.forEach((r) => (r.tags || []).forEach((t) => (allTags[t] = (allTags[t] || 0) + 1)));
-  const top = Object.entries(allTags).sort((a, b) => b[1] - a[1]).map(([t]) => t);
+  reviews.forEach((r) => (r.tags||[]).forEach((t) => (allTags[t]=(allTags[t]||0)+1)));
+  const top = Object.entries(allTags).sort((a,b) => b[1]-a[1]).map(([t]) => t);
   const apellido = prof.nombre.split(" ").pop();
   if (avg >= 4.5) return `Los estudiantes tienen una opinión muy positiva de ${apellido}. Destacado por ser ${top.slice(0,2).join(" y ")}. Muy recomendado.`;
-  if (avg >= 3.5) return `${apellido} tiene buenas reseñas. Los estudiantes valoran que es ${top[0] || "comprometido"}, aunque la materia requiere dedicación.`;
-  if (avg >= 2.5) return `Las opiniones sobre ${apellido} son mixtas. Algunos rescatan ${top[0] || "su conocimiento"}, pero otros señalan dificultades.`;
+  if (avg >= 3.5) return `${apellido} tiene buenas reseñas. Los estudiantes valoran que es ${top[0]||"comprometido"}, aunque la materia requiere dedicación.`;
+  if (avg >= 2.5) return `Las opiniones sobre ${apellido} son mixtas. Algunos rescatan ${top[0]||"su conocimiento"}, pero otros señalan dificultades.`;
   return `La mayoría tuvo dificultades con ${apellido}. Las reseñas mencionan ${top.slice(0,2).join(" y ")} como aspectos negativos.`;
 }
 
 export default function App() {
   const [session, setSession] = useState(null);
   const [perfil, setPerfil] = useState(null);
+  const [perfilesMap, setPerfilesMap] = useState({});
   const [profesores, setProfesores] = useState([]);
   const [resenas, setResenas] = useState({});
   const [materias, setMaterias] = useState([]);
   const [votos, setVotos] = useState({});
   const [comentarios, setComentarios] = useState({});
   const [loading, setLoading] = useState(true);
-  const [mainTab, setMainTab] = useState("materias");
+
+  // Navigation
+  const [view, setView] = useState("materias"); // materias | profesores | comunidad | mis-resenas | mis-comentarios | resenas-votadas | perfil-usuario
+  const [currentProf, setCurrentProf] = useState(null);
+  const [currentMateria, setCurrentMateria] = useState(null);
+  const [viewingUser, setViewingUser] = useState(null);
+
+  // Filters
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState("");
   const [modalidadFilter, setModalidadFilter] = useState("");
   const [profTab, setProfTab] = useState("todos");
-  const [currentProf, setCurrentProf] = useState(null);
-  const [currentMateria, setCurrentMateria] = useState(null);
   const [detailModalidad, setDetailModalidad] = useState("");
+
+  // Modals
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [editingReview, setEditingReview] = useState(null);
   const [showAddProfModal, setShowAddProfModal] = useState(false);
   const [showAddMateriaModal, setShowAddMateriaModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showUsernameModal, setShowUsernameModal] = useState(false);
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [showEditProfFotoModal, setShowEditProfFotoModal] = useState(false);
+  const [editingProfFoto, setEditingProfFoto] = useState(null);
+  const [profFotoUrl, setProfFotoUrl] = useState("");
+
+  // Auth
   const [authMode, setAuthMode] = useState("login");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authMsg, setAuthMsg] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
+
+  // Username/profile setup
   const [usernameInput, setUsernameInput] = useState("");
-  const [usernameSuggestion, setUsernameSuggestion] = useState("");
   const [usernameMsg, setUsernameMsg] = useState("");
+  const [editFotoUrl, setEditFotoUrl] = useState("");
+  const [editCarrera, setEditCarrera] = useState("");
+  const [editDescripcion, setEditDescripcion] = useState("");
+
+  // Review form
   const [selectedStar, setSelectedStar] = useState(0);
   const [selectedTags, setSelectedTags] = useState([]);
   const [revText, setRevText] = useState("");
   const [revMateria, setRevMateria] = useState("");
   const [revModalidad, setRevModalidad] = useState("Presencial");
   const [guestEmail, setGuestEmail] = useState("");
+
+  // Add prof/materia
   const [newNombre, setNewNombre] = useState("");
   const [newDept, setNewDept] = useState("");
   const [newMaterias, setNewMaterias] = useState([]);
@@ -124,6 +152,8 @@ export default function App() {
   const [nuevaMateria, setNuevaMateria] = useState("");
   const [nuevaMateriaDirecta, setNuevaMateriaDirecta] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Comments
   const [comentarioTexto, setComentarioTexto] = useState({});
   const [expandedComments, setExpandedComments] = useState({});
 
@@ -148,63 +178,56 @@ export default function App() {
 
   async function fetchAll() {
     setLoading(true);
-    const [{ data: profs }, { data: revs }, { data: mats }, { data: vots }, { data: coms }] = await Promise.all([
+    const [{ data: profs }, { data: revs }, { data: mats }, { data: vots }, { data: coms }, { data: perfs }] = await Promise.all([
       supabase.from("profesores").select("*").order("nombre"),
       supabase.from("resenas").select("*").order("created_at", { ascending: false }),
       supabase.from("materias").select("*").order("nombre"),
       supabase.from("votos").select("*"),
       supabase.from("comentarios").select("*").order("created_at", { ascending: true }),
+      supabase.from("perfiles").select("*"),
     ]);
     const resMap = {};
-    (revs || []).forEach((r) => {
-      if (!resMap[r.profesor_id]) resMap[r.profesor_id] = [];
-      resMap[r.profesor_id].push(r);
-    });
+    (revs||[]).forEach((r) => { if (!resMap[r.profesor_id]) resMap[r.profesor_id]=[]; resMap[r.profesor_id].push(r); });
     const votMap = {};
-    (vots || []).forEach((v) => {
-      if (!votMap[v.resena_id]) votMap[v.resena_id] = [];
-      votMap[v.resena_id].push(v);
-    });
+    (vots||[]).forEach((v) => { if (!votMap[v.resena_id]) votMap[v.resena_id]=[]; votMap[v.resena_id].push(v); });
     const comMap = {};
-    (coms || []).forEach((c) => {
-      if (!comMap[c.resena_id]) comMap[c.resena_id] = [];
-      comMap[c.resena_id].push(c);
-    });
-    setProfesores(profs || []);
+    (coms||[]).forEach((c) => { if (!comMap[c.resena_id]) comMap[c.resena_id]=[]; comMap[c.resena_id].push(c); });
+    const pMap = {};
+    (perfs||[]).forEach((p) => { pMap[p.id] = p; });
+    setProfesores(profs||[]);
     setResenas(resMap);
-    setMaterias(mats || []);
+    setMaterias(mats||[]);
     setVotos(votMap);
     setComentarios(comMap);
+    setPerfilesMap(pMap);
     setLoading(false);
   }
 
   async function handleVoto(resenaId, tipo, resenaUserId) {
     if (!session) { setShowAuthModal(true); setAuthMode("login"); return; }
     if (session.user.id === resenaUserId) return;
-    const misVotos = votos[resenaId] || [];
-    const miVoto = misVotos.find((v) => v.user_id === session.user.id);
+    const misVotos = votos[resenaId]||[];
+    const miVoto = misVotos.find((v) => v.user_id===session.user.id);
     if (miVoto) {
-      if (miVoto.tipo === tipo) await supabase.from("votos").delete().eq("id", miVoto.id);
+      if (miVoto.tipo===tipo) await supabase.from("votos").delete().eq("id", miVoto.id);
       else await supabase.from("votos").update({ tipo }).eq("id", miVoto.id);
     } else {
       await supabase.from("votos").insert({ resena_id: resenaId, user_id: session.user.id, tipo });
     }
     const { data: vots } = await supabase.from("votos").select("*");
     const votMap = {};
-    (vots || []).forEach((v) => { if (!votMap[v.resena_id]) votMap[v.resena_id] = []; votMap[v.resena_id].push(v); });
+    (vots||[]).forEach((v) => { if (!votMap[v.resena_id]) votMap[v.resena_id]=[]; votMap[v.resena_id].push(v); });
     setVotos(votMap);
   }
 
   async function handleComentario(resenaId) {
     if (!session) { setShowAuthModal(true); setAuthMode("login"); return; }
     if (!perfil) {
-      const s = randomUsername();
-      setUsernameSuggestion(s);
-      setUsernameInput(s);
+      setUsernameInput(randomUsername());
       setShowUsernameModal(true);
       return;
     }
-    const texto = (comentarioTexto[resenaId] || "").trim();
+    const texto = (comentarioTexto[resenaId]||"").trim();
     if (!texto) return;
     await supabase.from("comentarios").insert({ resena_id: resenaId, user_id: session.user.id, username: perfil.username, texto });
     setComentarioTexto((prev) => ({ ...prev, [resenaId]: "" }));
@@ -220,24 +243,34 @@ export default function App() {
     setShowUsernameModal(false);
   }
 
+  async function saveProfile() {
+    await supabase.from("perfiles").update({ foto_url: editFotoUrl, carrera: editCarrera, descripcion: editDescripcion }).eq("id", session.user.id);
+    await fetchPerfil(session.user.id);
+    await fetchAll();
+    setShowEditProfileModal(false);
+  }
+
+  async function saveProfFoto() {
+    await supabase.from("profesores").update({ foto_url: profFotoUrl }).eq("id", editingProfFoto.id);
+    await fetchAll();
+    setShowEditProfFotoModal(false);
+    setProfFotoUrl("");
+    setEditingProfFoto(null);
+  }
+
   async function handleAuth() {
     setAuthLoading(true);
     setAuthMsg("");
-    if (authMode === "login") {
+    if (authMode==="login") {
       const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
       if (error) setAuthMsg("Email o contraseña incorrectos.");
       else { setShowAuthModal(false); setAuthEmail(""); setAuthPassword(""); }
     } else {
-      const { error } = await supabase.auth.signUp({
-        email: authEmail, password: authPassword,
-        options: { emailRedirectTo: "https://profescore-eta.vercel.app" }
-      });
+      const { error } = await supabase.auth.signUp({ email: authEmail, password: authPassword, options: { emailRedirectTo: "https://profescore-eta.vercel.app" } });
       if (error) setAuthMsg(error.message);
       else {
         setAuthMsg("¡Revisá tu email y hacé clic en el link de confirmación!");
-        const s = randomUsername();
-        setUsernameSuggestion(s);
-        setUsernameInput(s);
+        setUsernameInput(randomUsername());
       }
     }
     setAuthLoading(false);
@@ -245,50 +278,54 @@ export default function App() {
 
   async function handleLogout() { await supabase.auth.signOut(); }
 
-  async function addNuevaMateriaDirecta() {
-    if (!nuevaMateriaDirecta.trim()) return;
-    await supabase.from("materias").insert({ nombre: nuevaMateriaDirecta.trim() });
-    await fetchAll();
-    setNuevaMateriaDirecta("");
-    setShowAddMateriaModal(false);
+  function openEditProfile() {
+    setEditFotoUrl(perfil?.foto_url||"");
+    setEditCarrera(perfil?.carrera||"");
+    setEditDescripcion(perfil?.descripcion||"");
+    setShowEditProfileModal(true);
+  }
+
+  function openUserProfile(userId) {
+    if (!session) { setShowAuthModal(true); return; }
+    const p = perfilesMap[userId];
+    if (p) { setViewingUser(p); setView("perfil-usuario"); }
   }
 
   function getFilteredProfs() {
     const q = search.toLowerCase();
     let list = profesores.filter((p) => {
-      const match = p.nombre.toLowerCase().includes(q) || p.departamento.toLowerCase().includes(q) || (p.materias || []).some((m) => m.toLowerCase().includes(q));
-      const dMatch = !deptFilter || p.departamento === deptFilter;
-      if (currentMateria) return (p.materias || []).includes(currentMateria) && dMatch;
+      const match = p.nombre.toLowerCase().includes(q) || p.departamento.toLowerCase().includes(q) || (p.materias||[]).some((m) => m.toLowerCase().includes(q));
+      const dMatch = !deptFilter || p.departamento===deptFilter;
+      if (currentMateria) return (p.materias||[]).includes(currentMateria) && dMatch;
       return match && dMatch;
     });
     const withAvg = list.map((p) => {
-      let revs = resenas[p.id] || [];
-      if (modalidadFilter) revs = revs.filter((r) => r.modalidad === modalidadFilter);
+      let revs = resenas[p.id]||[];
+      if (modalidadFilter) revs = revs.filter((r) => r.modalidad===modalidadFilter);
       return { ...p, avg: avgRating(revs), cnt: revs.length };
     });
-    if (profTab === "mejor") withAvg.sort((a, b) => b.avg - a.avg);
-    else if (profTab === "recientes") withAvg.sort((a, b) => b.cnt - a.cnt);
+    if (profTab==="mejor") withAvg.sort((a,b) => b.avg-a.avg);
+    else if (profTab==="recientes") withAvg.sort((a,b) => b.cnt-a.cnt);
     return withAvg;
   }
 
   function getFilteredMaterias() {
-    const q = search.toLowerCase();
-    return materias.filter((m) => m.nombre.toLowerCase().includes(q));
+    return materias.filter((m) => m.nombre.toLowerCase().includes(search.toLowerCase()));
   }
 
   const depts = [...new Set(profesores.map((p) => p.departamento))].sort();
 
-  function openReview(prof, reviewToEdit = null) {
+  function openReview(prof, reviewToEdit=null) {
     setCurrentProf(prof);
     setEditingReview(reviewToEdit);
     if (reviewToEdit) {
       setRevMateria(reviewToEdit.materia);
-      setRevModalidad(reviewToEdit.modalidad || "Presencial");
+      setRevModalidad(reviewToEdit.modalidad||"Presencial");
       setSelectedStar(reviewToEdit.rating);
-      setSelectedTags(reviewToEdit.tags || []);
+      setSelectedTags(reviewToEdit.tags||[]);
       setRevText(reviewToEdit.texto);
     } else {
-      setRevMateria((prof.materias || [])[0] || materias[0]?.nombre || "");
+      setRevMateria((prof.materias||[])[0]||materias[0]?.nombre||"");
       setSelectedStar(0); setSelectedTags([]); setRevText(""); setRevModalidad("Presencial");
     }
     setGuestEmail("");
@@ -308,8 +345,7 @@ export default function App() {
         profesor_id: currentProf.id, materia: revMateria, rating: selectedStar,
         texto: revText.trim(), tags: selectedTags, modalidad: revModalidad,
         user_email: userEmail, verified, is_guest: !session,
-        user_id: session?.user?.id || null,
-        username: perfil?.username || null,
+        user_id: session?.user?.id||null, username: perfil?.username||null,
       });
     }
     await fetchAll();
@@ -328,16 +364,20 @@ export default function App() {
   async function addNuevaMateria() {
     if (!nuevaMateria.trim()) return;
     const { data } = await supabase.from("materias").insert({ nombre: nuevaMateria.trim() }).select().single();
-    if (data) {
-      setMaterias((prev) => [...prev, data].sort((a, b) => a.nombre.localeCompare(b.nombre)));
-      setNewMaterias((prev) => [...prev, data.nombre]);
-    }
+    if (data) { setMaterias((prev) => [...prev, data].sort((a,b) => a.nombre.localeCompare(b.nombre))); setNewMaterias((prev) => [...prev, data.nombre]); }
     setNuevaMateria(""); setShowNewMateriaField(false);
   }
 
+  async function addNuevaMateriaDirecta() {
+    if (!nuevaMateriaDirecta.trim()) return;
+    await supabase.from("materias").insert({ nombre: nuevaMateriaDirecta.trim() });
+    await fetchAll();
+    setNuevaMateriaDirecta(""); setShowAddMateriaModal(false);
+  }
+
   async function addProf() {
-    if (!newNombre.trim() || !newDept.trim()) { alert("Completá nombre y área"); return; }
-    if (newMaterias.length === 0) { alert("Seleccioná al menos una materia"); return; }
+    if (!newNombre.trim()||!newDept.trim()) { alert("Completá nombre y área"); return; }
+    if (newMaterias.length===0) { alert("Seleccioná al menos una materia"); return; }
     setSubmitting(true);
     await supabase.from("profesores").insert({ nombre: newNombre.trim(), departamento: newDept.trim(), materias: newMaterias });
     await fetchAll();
@@ -347,155 +387,342 @@ export default function App() {
   }
 
   function toggleNewMateria(nombre) {
-    setNewMaterias((prev) => prev.includes(nombre) ? prev.filter((x) => x !== nombre) : [...prev, nombre]);
+    setNewMaterias((prev) => prev.includes(nombre) ? prev.filter((x) => x!==nombre) : [...prev, nombre]);
   }
 
-  const profRevs = currentProf ? (resenas[currentProf.id] || []) : [];
-  const filteredProfRevs = detailModalidad ? profRevs.filter((r) => r.modalidad === detailModalidad) : profRevs;
+  // All reviews flat list
+  const allRevenas = Object.values(resenas).flat();
+  const profRevs = currentProf ? (resenas[currentProf.id]||[]) : [];
+  const filteredProfRevs = detailModalidad ? profRevs.filter((r) => r.modalidad===detailModalidad) : profRevs;
   const tagCounts = {};
-  filteredProfRevs.forEach((r) => (r.tags || []).forEach((t) => (tagCounts[t] = (tagCounts[t] || 0) + 1)));
-  const topTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  const preguntas = revModalidad === "Online" ? PREGUNTAS_ONLINE : PREGUNTAS_PRESENCIAL;
+  filteredProfRevs.forEach((r) => (r.tags||[]).forEach((t) => (tagCounts[t]=(tagCounts[t]||0)+1)));
+  const topTags = Object.entries(tagCounts).sort((a,b) => b[1]-a[1]).slice(0,5);
+  const preguntas = revModalidad==="Online" ? PREGUNTAS_ONLINE : PREGUNTAS_PRESENCIAL;
 
-  function renderReviews(revsList) {
-    return revsList.map((r) => {
-      const isOwner = session && r.user_id === session.user.id;
-      const revVotos = votos[r.id] || [];
-      const likes = revVotos.filter((v) => v.tipo === "like").length;
-      const dislikes = revVotos.filter((v) => v.tipo === "dislike").length;
-      const miVoto = session ? revVotos.find((v) => v.user_id === session.user.id) : null;
-      const puedeVotar = session && !isOwner;
-      const revComs = comentarios[r.id] || [];
-      const showComs = expandedComments[r.id];
-      return (
-        <div key={r.id} className="review-card">
-          <div className="review-top">
-            <div style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:6}}>
-              <span className="review-materia">{r.materia}</span>
-              <span className="stars">{starsStr(r.rating)}</span>
-              <span className={`modalidad-badge${r.modalidad==="Online"?" online":""}`}>{r.modalidad||"Presencial"}</span>
-              {r.verified ? <span className="badge-up">✓ Alumno UP</span> : r.is_guest ? <span className="badge-guest">Invitado</span> : null}
-              {r.username && <span className="review-username">@{r.username}</span>}
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <span className="review-date">{new Date(r.created_at).toLocaleDateString("es-AR",{month:"short",year:"numeric"})}</span>
-              {isOwner && (
-                <div style={{display:"flex",gap:4}}>
-                  <button className="review-action-btn" onClick={() => openReview(currentProf, r)}>✎</button>
-                  <button className="review-action-btn delete" onClick={() => deleteReview(r.id)}>✕</button>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="review-text">{r.texto}</div>
-          {(r.tags||[]).length > 0 && <div className="tags" style={{marginTop:6}}>{r.tags.map((t) => <span key={t} className={`tag ${tagClass(t)}`}>{t}</span>)}</div>}
-          <div className="vote-row">
-            <span className="vote-label">¿Estás de acuerdo?</span>
-            <button className={`vote-btn like${miVoto?.tipo==="like"?" active":""} ${!puedeVotar?"disabled":""}`}
-              onClick={() => puedeVotar && handleVoto(r.id,"like",r.user_id)}
-              title={!session?"Iniciá sesión para votar":isOwner?"No podés votar tu propia reseña":""}>
-              👍 {likes}
-            </button>
-            <button className={`vote-btn dislike${miVoto?.tipo==="dislike"?" active":""} ${!puedeVotar?"disabled":""}`}
-              onClick={() => puedeVotar && handleVoto(r.id,"dislike",r.user_id)}
-              title={!session?"Iniciá sesión para votar":isOwner?"No podés votar tu propia reseña":""}>
-              👎 {dislikes}
-            </button>
-            <button className="comments-toggle" onClick={() => setExpandedComments((prev) => ({...prev,[r.id]:!prev[r.id]}))}>
-              💬 {revComs.length} {showComs ? "▲" : "▼"}
-            </button>
-            {!session && <span className="vote-hint" onClick={() => {setShowAuthModal(true);setAuthMode("login");}}>Iniciá sesión para votar</span>}
-          </div>
-          {showComs && (
-            <div className="comments-section">
-              {revComs.length === 0 && <div className="comment-empty">No hay comentarios todavía.</div>}
-              {revComs.map((c) => (
-                <div key={c.id} className="comment-item">
-                  <span className="comment-username">@{c.username}</span>
-                  <span className="comment-text">{c.texto}</span>
-                  <span className="comment-date">{new Date(c.created_at).toLocaleDateString("es-AR",{month:"short",year:"numeric"})}</span>
-                </div>
-              ))}
-              {session ? (
-                <div className="comment-input-row">
-                  <input
-                    value={comentarioTexto[r.id] || ""}
-                    onChange={(e) => setComentarioTexto((prev) => ({...prev,[r.id]:e.target.value}))}
-                    placeholder={perfil ? `Comentar como @${perfil.username}...` : "Comentar..."}
-                    onKeyDown={(e) => e.key==="Enter" && handleComentario(r.id)}
-                  />
-                  <button className="btn-primary" style={{flex:"none",padding:"6px 14px",fontSize:13}} onClick={() => handleComentario(r.id)}>Enviar</button>
-                </div>
-              ) : (
-                <div className="comment-login-hint">
-                  <button className="link-btn" onClick={() => {setShowAuthModal(true);setAuthMode("login");}}>Iniciá sesión</button> para comentar.
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      );
-    });
+  // My reviews/comments/voted
+  const myReviews = session ? allRevenas.filter((r) => r.user_id===session.user.id) : [];
+  const myComments = session ? Object.values(comentarios).flat().filter((c) => c.user_id===session.user.id) : [];
+  const myVotedIds = session ? Object.entries(votos).filter(([,vs]) => vs.some((v) => v.user_id===session.user.id)).map(([id]) => id) : [];
+  const myVotedReviews = allRevenas.filter((r) => myVotedIds.includes(r.id));
+
+  function AvatarImg({ url, name, size=44, fontSize=14 }) {
+    const c = colorFor(name ? name.charCodeAt(0) % COLORS.length : 0);
+    if (url) return <div style={{width:size,height:size,borderRadius:"50%",overflow:"hidden",flexShrink:0}}><img src={url} alt={name} style={{width:"100%",height:"100%",objectFit:"cover"}} /></div>;
+    return <div style={{width:size,height:size,borderRadius:"50%",background:c.bg,color:c.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:600,fontSize,flexShrink:0}}>{initials(name||"?")}</div>;
   }
 
-  return (
-    <div className="app">
-      {!currentProf ? (
-        <>
-          <div className="header">
-            <div>
-              <div className="logo"><div className="dot" />ProfeScore</div>
-              <div className="subtitle">Universidad de Palermo</div>
-            </div>
-            <div style={{display:"flex",gap:8,alignItems:"center"}}>
-              {session ? (
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <span style={{fontSize:12,color:"#888"}}>
-                    {perfil ? <span style={{color:"#555"}}>@{perfil.username}</span> : null}
-                    {isUP(session.user.email) ? <span className="badge-up" style={{marginLeft:4}}>✓ Alumno UP</span> : null}
-                  </span>
-                  <button className="btn-outline" onClick={handleLogout}>Salir</button>
-                </div>
-              ) : (
-                <button className="btn-outline" onClick={() => {setShowAuthModal(true);setAuthMode("login");setAuthMsg("");}}>Iniciar sesión</button>
-              )}
-              <button className="btn-outline" onClick={() => setShowAddMateriaModal(true)}>+ Materia</button>
-              <button className="btn-outline" onClick={() => setShowAddProfModal(true)}>+ Profesor</button>
-            </div>
-          </div>
+  function renderReviewCard(r, showProf=false) {
+    const isOwner = session && r.user_id===session.user.id;
+    const isAdminUser = session && isAdmin(session.user.id);
+    const revVotos = votos[r.id]||[];
+    const likes = revVotos.filter((v) => v.tipo==="like").length;
+    const dislikes = revVotos.filter((v) => v.tipo==="dislike").length;
+    const miVoto = session ? revVotos.find((v) => v.user_id===session.user.id) : null;
+    const puedeVotar = session && !isOwner;
+    const revComs = comentarios[r.id]||[];
+    const showComs = expandedComments[r.id];
+    const userPerfil = perfilesMap[r.user_id];
+    const prof = profesores.find((p) => p.id===r.profesor_id);
 
-          <div className="search-bar">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar profesor o materia..." />
-            {mainTab === "profesores" && (
-              <>
-                <select value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)}>
-                  <option value="">Todas las áreas</option>
-                  {depts.map((d) => <option key={d} value={d}>{d}</option>)}
-                </select>
-                <select value={modalidadFilter} onChange={(e) => setModalidadFilter(e.target.value)}>
-                  <option value="">Presencial y online</option>
-                  <option value="Presencial">Presencial</option>
-                  <option value="Online">Online</option>
-                </select>
-              </>
+    return (
+      <div key={r.id} className="review-card">
+        {showProf && prof && (
+          <div style={{fontSize:12,color:"#888",marginBottom:6,fontWeight:500}}>
+            {prof.nombre} · <span style={{fontWeight:400}}>{r.materia}</span>
+          </div>
+        )}
+        <div className="review-top">
+          <div style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:6}}>
+            {!showProf && <span className="review-materia">{r.materia}</span>}
+            <span className="stars">{starsStr(r.rating)}</span>
+            <span className={`modalidad-badge${r.modalidad==="Online"?" online":""}`}>{r.modalidad||"Presencial"}</span>
+            {r.verified ? <span className="badge-up">✓ Alumno UP</span> : r.is_guest ? <span className="badge-guest">Invitado</span> : null}
+            {r.username && <span className="review-username" onClick={() => r.user_id && openUserProfile(r.user_id)}>@{r.username}</span>}
+            {userPerfil?.carrera && <span className="review-carrera">· {userPerfil.carrera}</span>}
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span className="review-date">{new Date(r.created_at).toLocaleDateString("es-AR",{month:"short",year:"numeric"})}</span>
+            {(isOwner||isAdminUser) && (
+              <div style={{display:"flex",gap:4}}>
+                {isOwner && <button className="review-action-btn" onClick={() => { const p=profesores.find(x=>x.id===r.profesor_id); if(p) openReview(p,r); }}>✎</button>}
+                <button className="review-action-btn delete" onClick={() => deleteReview(r.id)}>✕</button>
+              </div>
             )}
           </div>
+        </div>
+        <div className="review-text">{r.texto}</div>
+        {(r.tags||[]).length>0 && <div className="tags" style={{marginTop:6}}>{r.tags.map((t) => <span key={t} className={`tag ${tagClass(t)}`}>{t}</span>)}</div>}
+        <div className="vote-row">
+          <span className="vote-label">¿Estás de acuerdo?</span>
+          <button className={`vote-btn like${miVoto?.tipo==="like"?" active":""} ${!puedeVotar?"disabled":""}`} onClick={() => puedeVotar && handleVoto(r.id,"like",r.user_id)} title={!session?"Iniciá sesión":isOwner?"No podés votar la tuya":""}>👍 {likes}</button>
+          <button className={`vote-btn dislike${miVoto?.tipo==="dislike"?" active":""} ${!puedeVotar?"disabled":""}`} onClick={() => puedeVotar && handleVoto(r.id,"dislike",r.user_id)} title={!session?"Iniciá sesión":isOwner?"No podés votar la tuya":""}>👎 {dislikes}</button>
+          <button className="comments-toggle" onClick={() => setExpandedComments((prev) => ({...prev,[r.id]:!prev[r.id]}))}>💬 {revComs.length} {showComs?"▲":"▼"}</button>
+          {!session && <span className="vote-hint" onClick={() => {setShowAuthModal(true);setAuthMode("login");}}>Iniciá sesión para votar</span>}
+        </div>
+        {showComs && (
+          <div className="comments-section">
+            {revComs.length===0 && <div className="comment-empty">No hay comentarios todavía.</div>}
+            {revComs.map((c) => {
+              const cp = perfilesMap[c.user_id];
+              return (
+                <div key={c.id} className="comment-item">
+                  <div className="comment-avatar" onClick={() => c.user_id && openUserProfile(c.user_id)} style={{cursor:"pointer"}}>
+                    {cp?.foto_url ? <img src={cp.foto_url} alt={c.username} /> : initials(c.username)}
+                  </div>
+                  <div className="comment-body">
+                    <div className="comment-meta">
+                      <span className="comment-username" onClick={() => c.user_id && openUserProfile(c.user_id)}>@{c.username}</span>
+                      {cp?.carrera && <span className="comment-carrera">{cp.carrera}</span>}
+                      <span className="comment-date">{new Date(c.created_at).toLocaleDateString("es-AR",{month:"short",year:"numeric"})}</span>
+                    </div>
+                    <div className="comment-text">{c.texto}</div>
+                  </div>
+                </div>
+              );
+            })}
+            {session ? (
+              <div className="comment-input-row">
+                <input value={comentarioTexto[r.id]||""} onChange={(e) => setComentarioTexto((prev) => ({...prev,[r.id]:e.target.value}))} placeholder={perfil?`Comentar como @${perfil.username}...`:"Comentar..."} onKeyDown={(e) => e.key==="Enter" && handleComentario(r.id)} />
+                <button className="btn-primary" style={{flex:"none",padding:"6px 14px",fontSize:13}} onClick={() => handleComentario(r.id)}>Enviar</button>
+              </div>
+            ) : (
+              <div className="comment-login-hint"><button className="link-btn" onClick={() => {setShowAuthModal(true);setAuthMode("login");}}>Iniciá sesión</button> para comentar.</div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
-          <div className="tabs">
-            {[["materias","Materias"],["profesores","Profesores"]].map(([k,l]) => (
-              <button key={k} className={`tab${mainTab===k?" active":""}`} onClick={() => {setMainTab(k);setCurrentMateria(null);setSearch("");}}>
-                {l}
+  function Sidebar() {
+    const items = [
+      { id:"materias", icon:"📚", label:"Materias" },
+      { id:"profesores", icon:"👨‍🏫", label:"Profesores" },
+      { id:"comunidad", icon:"👥", label:"Comunidad" },
+    ];
+    const myItems = session ? [
+      { id:"mis-resenas", icon:"✍️", label:"Mis reseñas" },
+      { id:"mis-comentarios", icon:"💬", label:"Mis comentarios" },
+      { id:"resenas-votadas", icon:"👍", label:"Reseñas votadas" },
+    ] : [];
+
+    return (
+      <div className="sidebar">
+        <div className="sidebar-logo">
+          <div className="logo"><div className="dot" />ProfeScore</div>
+          <div className="subtitle">Universidad de Palermo</div>
+        </div>
+        <div className="sidebar-section">
+          <div className="sidebar-section-title">Explorar</div>
+          {items.map((item) => (
+            <button key={item.id} className={`sidebar-item${view===item.id&&!currentProf?" active":""}`} onClick={() => { setView(item.id); setCurrentProf(null); setCurrentMateria(null); setSearch(""); }}>
+              <span className="icon">{item.icon}</span>{item.label}
+            </button>
+          ))}
+        </div>
+        {session && (
+          <div className="sidebar-section">
+            <div className="sidebar-section-title">Mi actividad</div>
+            {myItems.map((item) => (
+              <button key={item.id} className={`sidebar-item${view===item.id?" active":""}`} onClick={() => { setView(item.id); setCurrentProf(null); }}>
+                <span className="icon">{item.icon}</span>{item.label}
               </button>
             ))}
           </div>
+        )}
+        <div style={{padding:"1rem 1.25rem",borderTop:"1px solid #f0f0f0",marginTop:"auto"}}>
+          {session ? (
+            <div>
+              <div className="sidebar-user-info" style={{cursor:"pointer"}} onClick={() => { setViewingUser(perfil); setView("perfil-usuario"); }}>
+                <div className="sidebar-avatar">
+                  {perfil?.foto_url ? <img src={perfil.foto_url} alt={perfil.username} /> : (perfil?.username?initials(perfil.username):"?")}
+                </div>
+                <div>
+                  <div className="sidebar-username">{perfil?.username ? `@${perfil.username}` : "Sin nombre"}</div>
+                  {perfil?.carrera && <div className="sidebar-carrera">{perfil.carrera}</div>}
+                </div>
+              </div>
+              <button className="btn-outline" style={{width:"100%",marginTop:8,fontSize:12}} onClick={handleLogout}>Cerrar sesión</button>
+            </div>
+          ) : (
+            <button className="btn-primary" style={{width:"100%"}} onClick={() => {setShowAuthModal(true);setAuthMode("login");setAuthMsg("");}}>Iniciar sesión</button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
-          {loading ? <div className="empty">Cargando...</div> : mainTab === "materias" ? (
+  function HeaderActions() {
+    return (
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+        {session && isAdmin(session.user.id) && <span style={{fontSize:11,background:"#EEEDFE",color:"#3C3489",padding:"2px 8px",borderRadius:4,fontWeight:600}}>Admin</span>}
+        <button className="btn-outline" onClick={() => setShowAddMateriaModal(true)}>+ Materia</button>
+        <button className="btn-outline" onClick={() => setShowAddProfModal(true)}>+ Profesor</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="layout">
+      <Sidebar />
+      <div className="main-content">
+        <div className="inner">
+
+          {/* PROF DETAIL */}
+          {currentProf ? (
             <>
+              <div className="detail-topbar">
+                <button className="back-btn" onClick={() => setCurrentProf(null)}>← Volver</button>
+                {session && isAdmin(session.user.id) && (
+                  <button className="review-action-btn admin" onClick={() => { setEditingProfFoto(currentProf); setProfFotoUrl(currentProf.foto_url||""); setShowEditProfFotoModal(true); }}>📷 Foto del profesor</button>
+                )}
+              </div>
+              {(() => {
+                const idx = profesores.findIndex((x) => x.id===currentProf.id);
+                const c = colorFor(idx);
+                const avg = avgRating(filteredProfRevs);
+                const summary = aiSummary(currentProf, filteredProfRevs);
+                return (
+                  <>
+                    <div className="detail-header">
+                      <div className="detail-avatar" style={{background:c.bg,color:c.color}}>
+                        {currentProf.foto_url ? <img src={currentProf.foto_url} alt={currentProf.nombre} /> : initials(currentProf.nombre)}
+                      </div>
+                      <div>
+                        <div className="detail-name">{currentProf.nombre}</div>
+                        <div className="detail-dept">{currentProf.departamento}</div>
+                        <div className="tags" style={{marginTop:6}}>{(currentProf.materias||[]).map((m) => <span key={m} className="tag tag-blue">{m}</span>)}</div>
+                      </div>
+                    </div>
+                    <div className="modalidad-tabs">
+                      {[["","Todas"],["Presencial","Presencial"],["Online","Online"]].map(([k,l]) => (
+                        <button key={k} className={`modalidad-tab${detailModalidad===k?" active":""}`} onClick={() => setDetailModalidad(k)}>{l}</button>
+                      ))}
+                    </div>
+                    <div className="stats-row">
+                      {[[avg?avg.toFixed(1):"—","calificación",avg?ratingColor(avg):undefined],[filteredProfRevs.length,"reseñas",undefined],[(currentProf.materias||[]).length,"materias",undefined]].map(([v,l,col],i) => (
+                        <div key={i} className="stat-card"><div className="stat-val" style={col?{color:col}:{}}>{v}</div><div className="stat-lbl">{l}</div></div>
+                      ))}
+                    </div>
+                    {topTags.length>0 && <div className="tags" style={{marginBottom:"1.25rem"}}>{topTags.map(([t,n]) => <span key={t} className={`tag ${tagClass(t)}`}>{t} <span style={{opacity:0.6}}>({n})</span></span>)}</div>}
+                    {summary && <div className="ai-summary"><div className="ai-label">✦ Resumen IA</div>{summary}</div>}
+                    <div className="section-title">Reseñas {detailModalidad?`· ${detailModalidad}`:""}<span style={{fontWeight:400,color:"#aaa",fontSize:13}}> {filteredProfRevs.length} en total</span></div>
+                    {filteredProfRevs.length===0 && <div className="empty">No hay reseñas todavía</div>}
+                    {filteredProfRevs.map((r) => renderReviewCard(r))}
+                    <button className="add-review-btn" onClick={() => openReview(currentProf)}>✎ Agregar mi reseña</button>
+                  </>
+                );
+              })()}
+            </>
+
+          ) : view==="perfil-usuario" && viewingUser ? (
+            <>
+              <button className="back-btn" style={{marginBottom:"1.25rem"}} onClick={() => { setView("comunidad"); setViewingUser(null); }}>← Volver</button>
+              <div className="profile-header">
+                <div className="profile-avatar">
+                  {viewingUser.foto_url ? <img src={viewingUser.foto_url} alt={viewingUser.username} /> : initials(viewingUser.username||"?")}
+                </div>
+                <div style={{flex:1}}>
+                  <div className="profile-username">@{viewingUser.username}</div>
+                  {viewingUser.carrera && <div className="profile-carrera">{viewingUser.carrera}</div>}
+                  {viewingUser.descripcion && <div className="profile-descripcion">{viewingUser.descripcion}</div>}
+                  <div className="profile-stats" style={{marginTop:8}}>
+                    <span className="profile-stat"><strong>{allRevenas.filter((r) => r.user_id===viewingUser.id).length}</strong> reseñas</span>
+                    <span className="profile-stat"><strong>{Object.values(comentarios).flat().filter((c) => c.user_id===viewingUser.id).length}</strong> comentarios</span>
+                  </div>
+                  {session && viewingUser.id===session.user.id && (
+                    <button className="profile-edit-btn" onClick={openEditProfile}>✎ Editar perfil</button>
+                  )}
+                </div>
+              </div>
+              <div className="section-title">Reseñas de @{viewingUser.username}</div>
+              {allRevenas.filter((r) => r.user_id===viewingUser.id).length===0 && <div className="empty">Sin reseñas todavía</div>}
+              {allRevenas.filter((r) => r.user_id===viewingUser.id).map((r) => renderReviewCard(r, true))}
+            </>
+
+          ) : view==="mis-resenas" ? (
+            <>
+              <div className="header"><div><div className="logo"><div className="dot"/>ProfeScore</div></div></div>
+              <div className="section-title" style={{marginBottom:"1rem"}}>Mis reseñas <span style={{fontWeight:400,color:"#aaa",fontSize:13}}>{myReviews.length} en total</span></div>
+              {myReviews.length===0 ? <div className="empty">Todavía no dejaste ninguna reseña</div> : myReviews.map((r) => renderReviewCard(r, true))}
+            </>
+
+          ) : view==="mis-comentarios" ? (
+            <>
+              <div className="header"><div><div className="logo"><div className="dot"/>ProfeScore</div></div></div>
+              <div className="section-title" style={{marginBottom:"1rem"}}>Mis comentarios <span style={{fontWeight:400,color:"#aaa",fontSize:13}}>{myComments.length} en total</span></div>
+              {myComments.length===0 ? <div className="empty">Todavía no comentaste ninguna reseña</div> : (
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {myComments.map((c) => {
+                    const r = allRevenas.find((x) => x.id===c.resena_id);
+                    const prof = r ? profesores.find((p) => p.id===r.profesor_id) : null;
+                    return (
+                      <div key={c.id} className="review-card">
+                        {prof && <div style={{fontSize:12,color:"#888",marginBottom:6}}>{prof.nombre} · {r.materia}</div>}
+                        <div className="comment-text" style={{fontSize:13,color:"#555"}}>{c.texto}</div>
+                        <div style={{fontSize:11,color:"#aaa",marginTop:4}}>{new Date(c.created_at).toLocaleDateString("es-AR",{month:"short",year:"numeric"})}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+
+          ) : view==="resenas-votadas" ? (
+            <>
+              <div className="header"><div><div className="logo"><div className="dot"/>ProfeScore</div></div></div>
+              <div className="section-title" style={{marginBottom:"1rem"}}>Reseñas votadas <span style={{fontWeight:400,color:"#aaa",fontSize:13}}>{myVotedReviews.length} en total</span></div>
+              {myVotedReviews.length===0 ? <div className="empty">Todavía no votaste ninguna reseña</div> : myVotedReviews.map((r) => renderReviewCard(r, true))}
+            </>
+
+          ) : view==="comunidad" ? (
+            <>
+              <div className="header">
+                <div><div className="logo"><div className="dot"/>ProfeScore</div></div>
+                <HeaderActions />
+              </div>
+              <div className="section-title" style={{marginBottom:"1rem"}}>Comunidad <span style={{fontWeight:400,color:"#aaa",fontSize:13}}>{Object.keys(perfilesMap).length} miembros</span></div>
+              {!session ? (
+                <div className="empty">
+                  <button className="link-btn" onClick={() => {setShowAuthModal(true);setAuthMode("login");}}>Iniciá sesión</button> para ver los perfiles de otros estudiantes.
+                </div>
+              ) : (
+                <div className="users-list">
+                  {Object.values(perfilesMap).map((p) => (
+                    <div key={p.id} className="user-card" onClick={() => { setViewingUser(p); setView("perfil-usuario"); }}>
+                      <div className="sidebar-avatar" style={{width:40,height:40,fontSize:14}}>
+                        {p.foto_url ? <img src={p.foto_url} alt={p.username} /> : initials(p.username||"?")}
+                      </div>
+                      <div>
+                        <div style={{fontWeight:500,fontSize:14}}>@{p.username}</div>
+                        {p.carrera && <div style={{fontSize:12,color:"#888"}}>{p.carrera}</div>}
+                      </div>
+                      <div style={{marginLeft:"auto",fontSize:12,color:"#aaa"}}>
+                        {allRevenas.filter((r) => r.user_id===p.id).length} reseñas
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+
+          ) : view==="materias" ? (
+            <>
+              <div className="header">
+                <div><div className="logo"><div className="dot"/>ProfeScore</div></div>
+                <HeaderActions />
+              </div>
+              <div className="search-bar">
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar materia o profesor..." />
+              </div>
               {currentMateria ? (
                 <>
-                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:"1.25rem"}}>
-                    <button className="back-btn" onClick={() => setCurrentMateria(null)}>← Volver a materias</button>
-                    <span className="tag tag-blue" style={{fontSize:13,padding:"4px 12px"}}>{currentMateria}</span>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.25rem",flexWrap:"wrap",gap:8}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <button className="back-btn" onClick={() => setCurrentMateria(null)}>← Volver a materias</button>
+                      <span className="tag tag-blue" style={{fontSize:13,padding:"4px 12px"}}>{currentMateria}</span>
+                    </div>
+                    <button className="btn-outline" style={{fontSize:12}} onClick={() => setShowAddProfModal(true)}>+ Agregar profesor para esta materia</button>
                   </div>
                   <div className="tabs" style={{marginBottom:"1rem"}}>
                     {[["todos","Todos"],["mejor","Mejor calificados"],["recientes","Más reseñas"]].map(([k,l]) => (
@@ -503,14 +730,16 @@ export default function App() {
                     ))}
                   </div>
                   <div className="prof-list">
-                    {getFilteredProfs().length === 0 && <div className="empty">No hay profesores registrados para esta materia</div>}
-                    {getFilteredProfs().map((p, i) => {
+                    {getFilteredProfs().length===0 && <div className="empty">No hay profesores registrados para esta materia</div>}
+                    {getFilteredProfs().map((p,i) => {
                       const c = colorFor(i);
-                      const revs = resenas[p.id] || [];
+                      const revs = resenas[p.id]||[];
                       return (
                         <div key={p.id} className="prof-card" onClick={() => {setCurrentProf(p);setDetailModalidad("");}}>
                           <div className="prof-row">
-                            <div className="avatar" style={{background:c.bg,color:c.color}}>{initials(p.nombre)}</div>
+                            <div className="avatar" style={{background:c.bg,color:c.color}}>
+                              {p.foto_url ? <img src={p.foto_url} alt={p.nombre} /> : initials(p.nombre)}
+                            </div>
                             <div className="prof-info">
                               <div className="prof-name">{p.nombre}</div>
                               <div className="prof-meta">{p.departamento} · {revs.length} reseña{revs.length!==1?"s":""}</div>
@@ -527,7 +756,7 @@ export default function App() {
                 </>
               ) : (
                 <div className="materias-grid">
-                  {getFilteredMaterias().length === 0 && <div className="empty">No se encontraron materias</div>}
+                  {getFilteredMaterias().length===0 && <div className="empty">No se encontraron materias</div>}
                   {getFilteredMaterias().map((m) => {
                     const profsDeMateria = profesores.filter((p) => (p.materias||[]).includes(m.nombre));
                     return (
@@ -540,26 +769,47 @@ export default function App() {
                 </div>
               )}
             </>
+
           ) : (
+            // PROFESORES VIEW
             <>
-              <div className="tabs" style={{borderBottom:"none",marginBottom:"1rem"}}>
+              <div className="header">
+                <div><div className="logo"><div className="dot"/>ProfeScore</div></div>
+                <HeaderActions />
+              </div>
+              <div className="search-bar">
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar profesor o materia..." />
+                <select value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)}>
+                  <option value="">Todas las áreas</option>
+                  {depts.map((d) => <option key={d} value={d}>{d}</option>)}
+                </select>
+                <select value={modalidadFilter} onChange={(e) => setModalidadFilter(e.target.value)}>
+                  <option value="">Presencial y online</option>
+                  <option value="Presencial">Presencial</option>
+                  <option value="Online">Online</option>
+                </select>
+              </div>
+              <div className="tabs" style={{marginBottom:"1rem"}}>
                 {[["todos","Todos"],["mejor","Mejor calificados"],["recientes","Más reseñas"]].map(([k,l]) => (
                   <button key={k} className={`tab${profTab===k?" active":""}`} onClick={() => setProfTab(k)}>{l}</button>
                 ))}
               </div>
               <div className="prof-list">
-                {getFilteredProfs().length === 0 && <div className="empty">No se encontraron profesores</div>}
-                {getFilteredProfs().map((p, i) => {
+                {loading ? <div className="empty">Cargando...</div> : null}
+                {getFilteredProfs().length===0 && !loading && <div className="empty">No se encontraron profesores</div>}
+                {getFilteredProfs().map((p,i) => {
                   const c = colorFor(i);
-                  let revs = resenas[p.id] || [];
-                  if (modalidadFilter) revs = revs.filter((r) => r.modalidad === modalidadFilter);
+                  let revs = resenas[p.id]||[];
+                  if (modalidadFilter) revs = revs.filter((r) => r.modalidad===modalidadFilter);
                   const tagC = {};
                   revs.forEach((r) => (r.tags||[]).forEach((t) => (tagC[t]=(tagC[t]||0)+1)));
                   const tTop = Object.entries(tagC).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([t])=>t);
                   return (
                     <div key={p.id} className="prof-card" onClick={() => {setCurrentProf(p);setDetailModalidad("");}}>
                       <div className="prof-row">
-                        <div className="avatar" style={{background:c.bg,color:c.color}}>{initials(p.nombre)}</div>
+                        <div className="avatar" style={{background:c.bg,color:c.color}}>
+                          {p.foto_url ? <img src={p.foto_url} alt={p.nombre} /> : initials(p.nombre)}
+                        </div>
                         <div className="prof-info">
                           <div className="prof-name">{p.nombre}</div>
                           <div className="prof-meta">{p.departamento} · {revs.length} reseña{revs.length!==1?"s":""}</div>
@@ -576,70 +826,72 @@ export default function App() {
               </div>
             </>
           )}
-        </>
-      ) : (
-        <>
-          <div className="detail-topbar">
-            <button className="back-btn" onClick={() => setCurrentProf(null)}>← Volver</button>
-            {session && <span style={{fontSize:12,color:"#888"}}>
-              {perfil && <span style={{color:"#555"}}>@{perfil.username} </span>}
-              {isUP(session.user.email) && <span className="badge-up">✓ Alumno UP</span>}
-            </span>}
-          </div>
-          {(() => {
-            const idx = profesores.findIndex((x) => x.id === currentProf.id);
-            const c = colorFor(idx);
-            const avg = avgRating(filteredProfRevs);
-            const summary = aiSummary(currentProf, filteredProfRevs);
-            return (
-              <>
-                <div className="detail-header">
-                  <div className="detail-avatar" style={{background:c.bg,color:c.color}}>{initials(currentProf.nombre)}</div>
-                  <div>
-                    <div className="detail-name">{currentProf.nombre}</div>
-                    <div className="detail-dept">{currentProf.departamento}</div>
-                    <div className="tags" style={{marginTop:6}}>{(currentProf.materias||[]).map((m) => <span key={m} className="tag tag-blue">{m}</span>)}</div>
-                  </div>
-                </div>
-                <div className="modalidad-tabs">
-                  {[["","Todas"],["Presencial","Presencial"],["Online","Online"]].map(([k,l]) => (
-                    <button key={k} className={`modalidad-tab${detailModalidad===k?" active":""}`} onClick={() => setDetailModalidad(k)}>{l}</button>
-                  ))}
-                </div>
-                <div className="stats-row">
-                  {[[avg?avg.toFixed(1):"—","calificación",avg?ratingColor(avg):undefined],[filteredProfRevs.length,"reseñas",undefined],[(currentProf.materias||[]).length,"materias",undefined]].map(([v,l,col],i) => (
-                    <div key={i} className="stat-card"><div className="stat-val" style={col?{color:col}:{}}>{v}</div><div className="stat-lbl">{l}</div></div>
-                  ))}
-                </div>
-                {topTags.length > 0 && <div className="tags" style={{marginBottom:"1.25rem"}}>{topTags.map(([t,n]) => <span key={t} className={`tag ${tagClass(t)}`}>{t} <span style={{opacity:0.6}}>({n})</span></span>)}</div>}
-                {summary && <div className="ai-summary"><div className="ai-label">✦ Resumen IA</div>{summary}</div>}
-                <div className="section-title">Reseñas {detailModalidad?`· ${detailModalidad}`:""}<span style={{fontWeight:400,color:"#aaa",fontSize:13}}> {filteredProfRevs.length} en total</span></div>
-                {filteredProfRevs.length === 0 && <div className="empty">No hay reseñas todavía</div>}
-                {renderReviews(filteredProfRevs)}
-                <button className="add-review-btn" onClick={() => openReview(currentProf)}>✎ Agregar mi reseña</button>
-              </>
-            );
-          })()}
-        </>
-      )}
+        </div>
+      </div>
 
       {/* USERNAME MODAL */}
       {showUsernameModal && (
         <div className="modal-overlay" onClick={() => setShowUsernameModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-title">Elegí tu nombre en ProfeScore</div>
-            <div className="info-box">Este nombre es solo para identificarte en comentarios y reseñas. No tiene por qué ser tu nombre real.</div>
+            <div className="info-box">Este nombre es solo para identificarte. No tiene por qué ser tu nombre real.</div>
             <div className="form-group">
               <label className="form-label">Tu nombre</label>
               <input value={usernameInput} onChange={(e) => setUsernameInput(e.target.value)} placeholder="Ej: TigreVeloz" />
             </div>
-            <button className="add-materia-btn" style={{marginBottom:10}} onClick={() => { const s = randomUsername(); setUsernameSuggestion(s); setUsernameInput(s); }}>
-              🔀 Generar otro nombre aleatorio
-            </button>
+            <button className="add-materia-btn" style={{marginBottom:10}} onClick={() => setUsernameInput(randomUsername())}>🔀 Generar otro nombre aleatorio</button>
             {usernameMsg && <div className="auth-msg">{usernameMsg}</div>}
             <div className="modal-actions">
               <button className="btn-cancel" onClick={() => setShowUsernameModal(false)}>Cancelar</button>
               <button className="btn-primary" onClick={saveUsername}>Confirmar nombre</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT PROFILE MODAL */}
+      {showEditProfileModal && (
+        <div className="modal-overlay" onClick={() => setShowEditProfileModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-title">Editar perfil</div>
+            <div className="form-group">
+              <label className="form-label">URL de foto de perfil</label>
+              <input value={editFotoUrl} onChange={(e) => setEditFotoUrl(e.target.value)} placeholder="https://i.imgur.com/tu-foto.jpg" />
+              {editFotoUrl && <img src={editFotoUrl} alt="preview" className="foto-preview" onError={(e) => e.target.style.display="none"} />}
+              <div style={{fontSize:11,color:"#888",marginTop:4}}>Podés subir tu foto a <a href="https://imgur.com" target="_blank" rel="noreferrer" style={{color:"#1D9E75"}}>imgur.com</a> y pegar el link directo.</div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Carrera</label>
+              <select value={editCarrera} onChange={(e) => setEditCarrera(e.target.value)}>
+                <option value="">Sin especificar</option>
+                {CARRERAS.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Sobre mí</label>
+              <textarea value={editDescripcion} onChange={(e) => setEditDescripcion(e.target.value)} placeholder="Contá algo sobre vos..." />
+            </div>
+            <div className="modal-actions">
+              <button className="btn-cancel" onClick={() => setShowEditProfileModal(false)}>Cancelar</button>
+              <button className="btn-primary" onClick={saveProfile}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT PROF FOTO MODAL (admin only) */}
+      {showEditProfFotoModal && (
+        <div className="modal-overlay" onClick={() => setShowEditProfFotoModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-title">Foto de {editingProfFoto?.nombre}</div>
+            <div className="form-group">
+              <label className="form-label">URL de la foto</label>
+              <input value={profFotoUrl} onChange={(e) => setProfFotoUrl(e.target.value)} placeholder="https://i.imgur.com/foto.jpg" />
+              {profFotoUrl && <img src={profFotoUrl} alt="preview" className="foto-preview" onError={(e) => e.target.style.display="none"} />}
+            </div>
+            <div className="modal-actions">
+              <button className="btn-cancel" onClick={() => setShowEditProfFotoModal(false)}>Cancelar</button>
+              <button className="btn-primary" onClick={saveProfFoto}>Guardar</button>
             </div>
           </div>
         </div>
@@ -650,7 +902,12 @@ export default function App() {
         <div className="modal-overlay" onClick={() => setShowAuthModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-title">{authMode==="login"?"Iniciar sesión":"Crear cuenta"}</div>
-            {authMode==="register" && <div className="info-box">Si usás tu email <strong>@up.edu.ar</strong>, tus reseñas tendrán el badge <span className="badge-up">✓ Alumno UP</span></div>}
+            {authMode==="register" && (
+              <>
+                <div className="info-box">Si usás tu email <strong>@up.edu.ar</strong>, tus reseñas tendrán el badge <span className="badge-up">✓ Alumno UP</span></div>
+                <div className="info-box warning">⚠️ No uses una contraseña que tengas en otras cuentas importantes. Esta plataforma es estudiantil y es mejor usar una contraseña única.</div>
+              </>
+            )}
             <div className="form-group">
               <label className="form-label">Email</label>
               <input type="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} placeholder="tu@email.com" />
@@ -660,14 +917,9 @@ export default function App() {
               <input type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
             </div>
             {authMsg && <div className={`auth-msg${authMsg.includes("Revisá")?" success":""}`}>{authMsg}</div>}
-            {authMsg.includes("Revisá") && (
-              <div style={{marginTop:8}}>
-                <button className="btn-primary" onClick={() => { setShowAuthModal(false); const s=randomUsername(); setUsernameSuggestion(s); setUsernameInput(s); setShowUsernameModal(true); }}>
-                  Elegir mi nombre →
-                </button>
-              </div>
-            )}
-            {!authMsg.includes("Revisá") && (
+            {authMsg.includes("Revisá") ? (
+              <button className="btn-primary" onClick={() => { setShowAuthModal(false); setUsernameInput(randomUsername()); setShowUsernameModal(true); }}>Elegir mi nombre →</button>
+            ) : (
               <div className="modal-actions">
                 <button className="btn-cancel" onClick={() => setShowAuthModal(false)}>Cancelar</button>
                 <button className="btn-primary" onClick={handleAuth} disabled={authLoading}>{authLoading?"...":authMode==="login"?"Entrar":"Registrarme"}</button>
@@ -738,7 +990,7 @@ export default function App() {
             </div>
             <div className="modal-actions">
               <button className="btn-cancel" onClick={() => setShowAddMateriaModal(false)}>Cancelar</button>
-              <button className="btn-primary" onClick={addNuevaMateriaDirecta} disabled={submitting}>Agregar</button>
+              <button className="btn-primary" onClick={addNuevaMateriaDirecta}>Agregar</button>
             </div>
           </div>
         </div>
@@ -767,7 +1019,7 @@ export default function App() {
                     <button className="btn-primary" style={{flex:"none",padding:"6px 12px"}} onClick={addNuevaMateria}>Agregar</button>
                     <button className="btn-cancel" onClick={() => setShowNewMateriaField(false)}>✕</button>
                   </div>}
-              {newMaterias.length > 0 && <div style={{marginTop:8,fontSize:12,color:"#0F6E56"}}>Seleccionadas: {newMaterias.join(", ")}</div>}
+              {newMaterias.length>0 && <div style={{marginTop:8,fontSize:12,color:"#0F6E56"}}>Seleccionadas: {newMaterias.join(", ")}</div>}
             </div>
             <div className="modal-actions">
               <button className="btn-cancel" onClick={() => setShowAddProfModal(false)}>Cancelar</button>
