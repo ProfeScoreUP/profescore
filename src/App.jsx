@@ -785,8 +785,7 @@ export default function App() {
                 <>
                   {conversations.length===0&&<div className="empty">No tenés conversaciones todavía.</div>}
                   <div className="conversations-list">
-                    {conversations.map((conv)=>{const op=perfilesMap[conv.otherId];if(!op)return null;const mine=conv.lastMsg.de_user_id===session.user.id;return(
-                      <div key={conv.otherId} className={`conversation-item${conv.unread>0?" unread":""}`} onClick={()=>openChat(op)}>
+{conversations.map((conv)=>{const op=perfilesMap[conv.otherId]||{username:"Usuario",foto_url:null,carrera:null,id:conv.otherId};                      <div key={conv.otherId} className={`conversation-item${conv.unread>0?" unread":""}`} onClick={()=>openChat(op)}>
                         <Avatar url={op.foto_url} name={op.username} size={40} fontSize={14}/>
                         <div className="conv-info"><div className="conv-username">@{op.username}</div><div className="conv-preview">{mine?"Vos: ":""}{conv.lastMsg.texto}</div></div>
                         <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
