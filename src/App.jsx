@@ -4,7 +4,7 @@ import "./App.css";
 
 const ADMIN_ID = "bb0e6c4c-c4de-4679-b3bc-0bd318f2e5c1";
 const CONTACT_EMAIL = "profescoreup@gmail.com";
-const UP_LOGO = "https://www.palermo.edu/up_logo.png";
+const UP_LOGO = "https://i.imgur.com/pkwdNzA.png";
 
 const COLORS = [
   { bg: "#E1F5EE", color: "#085041" },
