@@ -869,7 +869,7 @@ export default function App() {
                           {conv.unread>0&&<span className="sidebar-badge">{conv.unread}</span>}
                         </div>
                       </div>
-                    );})}
+                    );}}}
                   </div>
                 </>
               )}
