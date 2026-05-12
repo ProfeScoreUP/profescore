@@ -261,7 +261,16 @@ export default function App() {
     await fetchMensajes();
   }
 
-  function openChat(userPerfil) { setChatWith(userPerfil); setView("mensajes"); markAsRead(userPerfil.id); }
+  function openChat(userPerfil) {
+  if (!perfil) {
+    setUsernameInput(randomUsername());
+    setShowUsernameModal(true);
+    return;
+  }
+  setChatWith(userPerfil);
+  setView("mensajes");
+  markAsRead(userPerfil.id);
+}
 
   function getConversations() {
     if(!session) return [];
@@ -423,6 +432,7 @@ export default function App() {
     setCurrentProf(prof); setEditingReview(reviewToEdit);
     if(reviewToEdit){setRevMateria(reviewToEdit.materia);setRevModalidad(reviewToEdit.modalidad||"Presencial");setSelectedStar(reviewToEdit.rating);setSelectedTags(reviewToEdit.tags||[]);setRevText(reviewToEdit.texto);}
     else{setRevMateria((prof.materias||[])[0]||materias[0]?.nombre||"");setSelectedStar(0);setSelectedTags([]);setRevText("");setRevModalidad("Presencial");}
+    if (session && !perfil) { setUsernameInput(randomUsername()); setShowUsernameModal(true); return; }
     setGuestEmail(""); setShowReviewModal(true);
   }
 
