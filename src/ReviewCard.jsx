@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../supabase";
+import { supabase } from "./supabase";
 import { useApp, starsStr, tagClass, timeAgo, isAdmin, Avatar, initials } from "./context";
 import { RichDisplay } from "./RichEditor";
 
