@@ -1,6 +1,7 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import { AppContext, useAppData } from "./context";
 import Sidebar from "./Sidebar";
+import HomePage from "./pages/Home";
 import MateriasPage from "./pages/Materias";
 import ProfesoresPage from "./pages/Profesores";
 import ProfesorPage from "./pages/Profesor";
@@ -23,7 +24,7 @@ export default function App() {
         <div className="main-content">
           <div className="inner">
             <Routes>
-              <Route path="/" element={<MateriasPage />} />
+              <Route path="/" element={<HomePage />} />
               <Route path="/materias" element={<MateriasPage />} />
               <Route path="/profesores" element={<ProfesoresPage />} />
               <Route path="/profesor/:id" element={<ProfesorPage />} />
