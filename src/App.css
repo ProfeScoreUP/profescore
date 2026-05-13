@@ -522,3 +522,47 @@ body {
 @media (max-width: 540px) {
   .dash-two-col { grid-template-columns: 1fr; }
 }
+/* MOBILE NAV */
+.mobile-topbar {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 52px;
+  background: var(--sidebar-bg);
+  border-bottom: 1px solid var(--border);
+  padding: 0 1rem;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 20;
+}
+.mobile-menu-btn {
+  background: none;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  color: var(--text);
+  padding: 4px 8px;
+}
+.mobile-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 30;
+}
+.mobile-drawer {
+  position: fixed;
+  top: 0; left: 0;
+  width: 260px;
+  height: 100vh;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+}
+@media (max-width: 700px) {
+  .sidebar { display: none; }
+  .mobile-topbar { display: flex; }
+  .main-content { margin-left: 0; padding: 1rem; padding-top: 64px; }
+}
