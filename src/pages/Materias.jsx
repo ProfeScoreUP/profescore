@@ -1,14 +1,27 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useApp, ALL_TAGS } from "../context";
+import { useApp, ALL_TAGS, isAdmin } from "../context";
+import { supabase } from "../supabase";
 
 export default function MateriasPage() {
-  const { materias, profesores, resenas } = useApp();
+  const { session, materias, profesores, resenas, fetchAll } = useApp();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [tagFilter, setTagFilter] = useState([]);
+  const [deletingId, setDeletingId] = useState(null);
+
+  const admin = session && isAdmin(session.user.id);
 
   function toggleTag(t) { setTagFilter(prev=>prev.includes(t)?prev.filter(x=>x!==t):[...prev,t]); }
+
+  async function deleteMateria(e, m) {
+    e.stopPropagation();
+    if(!window.confirm(`¿Eliminar la materia "${m.nombre}"?`)) return;
+    setDeletingId(m.id);
+    await supabase.from("materias").delete().eq("id", m.id);
+    await fetchAll();
+    setDeletingId(null);
+  }
 
   const filtered = materias.filter(m=>{
     const q = search.toLowerCase();
@@ -46,9 +59,19 @@ export default function MateriasPage() {
       {filtered.length===0&&<div className="empty">No se encontraron materias</div>}
       <div className="materias-grid">
         {filtered.map(m=>(
-          <div key={m.id} className="materia-card" onClick={()=>navigate(`/profesores?materia=${encodeURIComponent(m.nombre)}`)}>
+          <div key={m.id} className="materia-card" style={{position:"relative"}} onClick={()=>navigate(`/profesores?materia=${encodeURIComponent(m.nombre)}`)}>
             <div className="materia-nombre">{m.nombre}</div>
             <div className="materia-meta">{m.profCount} profesor{m.profCount!==1?"es":""}</div>
+            {admin&&(
+              <button
+                className="review-action-btn delete"
+                style={{position:"absolute",top:8,right:8,fontSize:11,padding:"2px 6px"}}
+                disabled={deletingId===m.id}
+                onClick={e=>deleteMateria(e,m)}
+              >
+                {deletingId===m.id?"...":"🗑"}
+              </button>
+            )}
           </div>
         ))}
       </div>

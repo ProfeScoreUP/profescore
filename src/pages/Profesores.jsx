@@ -15,8 +15,6 @@ export default function ProfesoresPage() {
   const [modalidadFilter, setModalidadFilter] = useState("");
   const [tagFilter, setTagFilter] = useState([]);
   const [tab, setTab] = useState("recientes");
-
-  // Nuevo profesor
   const [showNewProfModal, setShowNewProfModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [newNombre, setNewNombre] = useState("");
@@ -24,7 +22,9 @@ export default function ProfesoresPage() {
   const [newMateria, setNewMateria] = useState("");
   const [savingProf, setSavingProf] = useState(false);
   const [profMsg, setProfMsg] = useState("");
+  const [deletingId, setDeletingId] = useState(null);
 
+  const admin = session && isAdmin(session.user.id);
   const depts = [...new Set(profesores.map(p=>p.departamento))].sort();
 
   function toggleTag(t) { setTagFilter(prev=>prev.includes(t)?prev.filter(x=>x!==t):[...prev,t]); }
@@ -45,7 +45,6 @@ export default function ProfesoresPage() {
       materias: materias_arr,
     });
     if(error) { setProfMsg("Error al guardar. Intentá de nuevo."); setSavingProf(false); return; }
-    // Si puso una materia, también crearla en la tabla materias si no existe
     if(newMateria.trim()) {
       const existe = materias.find(m=>m.nombre.toLowerCase()===newMateria.trim().toLowerCase());
       if(!existe) await supabase.from("materias").insert({ nombre: newMateria.trim() });
@@ -53,6 +52,22 @@ export default function ProfesoresPage() {
     await fetchAll();
     setSavingProf(false);
     setShowNewProfModal(false);
+  }
+
+  async function deleteProfesor(e, p) {
+    e.stopPropagation();
+    if(!window.confirm(`¿Eliminar al profesor "${p.nombre}" y todas sus reseñas?`)) return;
+    setDeletingId(p.id);
+    // Eliminar votos y comentarios de sus reseñas
+    const profResenas = resenas[p.id] || [];
+    for(const r of profResenas) {
+      await supabase.from("votos").delete().eq("resena_id", r.id);
+      await supabase.from("comentarios").delete().eq("resena_id", r.id);
+    }
+    await supabase.from("resenas").delete().eq("profesor_id", p.id);
+    await supabase.from("profesores").delete().eq("id", p.id);
+    await fetchAll();
+    setDeletingId(null);
   }
 
   const filtered = profesores.filter(p=>{
@@ -125,7 +140,7 @@ export default function ProfesoresPage() {
           const tagC={};revs.forEach(r=>(r.tags||[]).forEach(t=>(tagC[t]=(tagC[t]||0)+1)));
           const tTop=Object.entries(tagC).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([t])=>t);
           return(
-            <div key={p.id} className="prof-card" onClick={()=>navigate(`/profesor/${p.id}`)}>
+            <div key={p.id} className="prof-card" style={{position:"relative"}} onClick={()=>navigate(`/profesor/${p.id}`)}>
               <div className="prof-row">
                 <div className="avatar" style={{background:c.bg,color:c.color}}>{p.foto_url?<img src={p.foto_url} alt={p.nombre}/>:initials(p.nombre)}</div>
                 <div className="prof-info">
@@ -138,6 +153,16 @@ export default function ProfesoresPage() {
                   <span style={{fontSize:10,opacity:0.8}}>{p.avg?"/ 5":""}</span>
                 </div>
               </div>
+              {admin&&(
+                <button
+                  className="review-action-btn delete"
+                  style={{position:"absolute",top:10,right:10,fontSize:11,padding:"2px 8px"}}
+                  disabled={deletingId===p.id}
+                  onClick={e=>deleteProfesor(e,p)}
+                >
+                  {deletingId===p.id?"...":"🗑"}
+                </button>
+              )}
             </div>
           );
         })}
@@ -159,7 +184,7 @@ export default function ProfesoresPage() {
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <div className="modal-title">Agregar profesor nuevo</div>
             <div className="info-box">
-              Antes de agregar, asegurate de buscarlo arriba. El nombre debe estar completo y bien escrito para que otros estudiantes puedan encontrarlo.
+              Antes de agregar, asegurate de buscarlo arriba. El nombre debe estar completo y bien escrito.
             </div>
             <div className="form-group">
               <label className="form-label">Nombre completo *</label>
