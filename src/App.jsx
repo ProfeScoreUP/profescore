@@ -154,6 +154,7 @@ export default function App(){
   const [chatInput,setChatInput]=useState("");
   const [currentHilo,setCurrentHilo]=useState(null);
   const [foroCat,setForoCat]=useState("");
+  const [foroSearch,setForoSearch]=useState("");
 
   const [search,setSearch]=useState("");
   const [deptFilter,setDeptFilter]=useState("");
@@ -490,7 +491,12 @@ export default function App(){
   const myVotedReviews=allRevenas.filter(r=>myVotedIds.includes(r.id));
   const conversations=getConversations();
   const chatMessages=getChatMessages();
-  const hilosFiltrados=foroCat?hilos.filter(h=>h.categoria===foroCat):hilos;
+const hilosFiltrados=hilos.filter(h=>{
+  const catMatch=!foroCat||h.categoria===foroCat;
+  const q=foroSearch.toLowerCase();
+  const textMatch=!q||h.titulo.toLowerCase().includes(q)||h.contenido.toLowerCase().includes(q)||(respuestas[h.id]||[]).some(r=>r.texto.toLowerCase().includes(q));
+  return catMatch&&textMatch;
+});
 
   function renderReviewCard(r,showProf=false){
     const isOwner=session&&r.user_id===session.user.id;
@@ -736,6 +742,9 @@ export default function App(){
                 </>
               ):(
                 <>
+                  <div className="search-bar" style={{marginBottom:"0.75rem"}}>
+  <input value={foroSearch} onChange={e=>setForoSearch(e.target.value)} placeholder="Buscar en el foro..."/>
+</div>
                   <div className="cat-filter-row">
                     <button className={`cat-filter-btn${!foroCat?" active":""}`} onClick={()=>setForoCat("")}>Todos</button>
                     {CATEGORIAS_FORO.map(c=><button key={c} className={`cat-filter-btn${foroCat===c?" active":""}`} onClick={()=>setForoCat(c)}>{c}</button>)}
