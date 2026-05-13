@@ -91,7 +91,7 @@ export function tagClass(t){
   const neg=["Aburrido","Oral difícil","Muchas tareas","Respondus"];
   if(pos.includes(t))return"tag-green";if(neg.includes(t))return"tag-red";return"tag-amber";
 }
-export function isUP(email){return email&&email.endsWith("@up.edu.ar");}
+export function isUP(email){return email&&(email.endsWith("@up.edu.ar")||email.endsWith("@palermo.edu.ar"));}
 export function isAdmin(uid){return uid===ADMIN_ID;}
 export function timeAgo(ts){
   const d=new Date(ts.endsWith("Z")?ts:ts+"Z");const now=new Date();const diff=Math.floor((now-d)/1000);
