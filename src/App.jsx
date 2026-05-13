@@ -38,7 +38,6 @@ export default function App() {
               <Route path="/mis-resenas" element={<MisResenasPage />} />
               <Route path="/mis-comentarios" element={<MisResenasPage tipo="comentarios" />} />
               <Route path="/resenas-votadas" element={<MisResenasPage tipo="votadas" />} />
-              <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </div>
         </div>
