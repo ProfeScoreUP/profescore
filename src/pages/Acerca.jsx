@@ -28,14 +28,9 @@ export default function AcercaPage() {
         <p>Pedimos a todos que sean honestos pero justos. Una mala nota no siempre significa un mal profesor, y una reseña resentida no le sirve a nadie. El objetivo es ayudarnos entre todos en nuestras carreras universitarias — y eso se logra compartiendo experiencias reales.</p>
       </div>
 
-      <div className="about-section" style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:"14px 18px"}}>
-        <h3 style={{color:"var(--text3)",fontSize:13,fontWeight:600,marginBottom:6}}>⚠️ Aviso importante</h3>
-        <p style={{fontSize:13,color:"var(--text3)"}}>ProfeScore es un sitio independiente creado por estudiantes de la Universidad de Palermo. No tiene ninguna afiliación oficial con la universidad ni representa sus opiniones o posiciones. El contenido publicado refleja exclusivamente las experiencias personales de los usuarios.</p>
-      </div>
-
 <div className="about-section" style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:"14px 18px"}}>
-  <h3>Compromiso con la comunidad universitaria</h3>
-  <p>ProfeScore fue creado con respeto por las normas y el Código de Honor de la Universidad de Palermo. El sitio no permite ni tolera el uso de expresiones injuriosas, discriminatorias o degradantes hacia profesores u otros estudiantes. Tampoco se permite la publicación de temarios o material de evaluaciones antes de que sean tomadas. Las reseñas deben reflejar experiencias reales y honestas — no ataques personales. Como plataforma independiente creada por estudiantes, nos comprometemos a moderar el contenido y a responder ante cualquier reporte de uso indebido. Si encontrás contenido que considerás inapropiado, escribinos a profescoreup@gmail.com.</p>
+  <h3 style={{marginBottom:8}}>Compromiso y uso responsable</h3>
+  <p>ProfeScore es un sitio independiente creado por estudiantes de la Universidad de Palermo, sin afiliación oficial con la institución. Fue creado con respeto por las normas y el Código de Honor de la UP: no se permiten expresiones injuriosas o degradantes hacia profesores u otros estudiantes, ni la publicación de temarios o material de evaluaciones antes de que sean tomadas. Las reseñas deben reflejar experiencias reales y honestas. El contenido publicado refleja exclusivamente las experiencias personales de los usuarios y nos comprometemos a moderar y responder ante cualquier reporte de uso indebido.</p>
 </div>
 
       <div className="about-contact">
