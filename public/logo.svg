@@ -1,11 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 320">
-  <polygon points="340,38 400,62 340,86 280,62" fill="#374151"/>
-  <ellipse cx="340" cy="86" rx="32" ry="10" fill="#4B5563"/>
-  <rect x="308" y="76" width="64" height="28" fill="#4B5563"/>
-  <ellipse cx="340" cy="76" rx="32" ry="10" fill="#6B7280"/>
-  <line x1="400" y1="62" x2="400" y2="88" stroke="#FBBF24" stroke-width="2.5"/>
-  <circle cx="400" cy="90" r="5" fill="#FBBF24"/>
-  <rect x="278" y="98" width="124" height="96" rx="22" fill="#4B5563"/>
-  <polygon points="306,188 290,215 326,188" fill="#4B5563"/>
-  <polygon points="340,112 348,136 374,136 353,151 361,175 340,160 319,175 327,151 306,136 332,136" fill="#FBBF24"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <polygon points="50,8 62,8 62,28 50,8 38,28 50,8" fill="#374151"/>
+  <polygon points="50,8 74,18 50,28 26,18" fill="#374151"/>
+  <ellipse cx="50" cy="28" rx="14" ry="4" fill="#4B5563"/>
+  <rect x="36" y="24" width="28" height="14" fill="#4B5563"/>
+  <ellipse cx="50" cy="24" rx="14" ry="4" fill="#6B7280"/>
+  <line x1="74" y1="18" x2="74" y2="30" stroke="#FBBF24" stroke-width="2"/>
+  <circle cx="74" cy="32" r="3" fill="#FBBF24"/>
+  <rect x="30" y="36" width="40" height="34" rx="10" fill="#4B5563"/>
+  <polygon points="38,68 30,80 46,68" fill="#4B5563"/>
+  <polygon points="50,42 53,51 63,51 55,57 58,66 50,60 42,66 45,57 37,51 47,51" fill="#FBBF24"/>
 </svg>
