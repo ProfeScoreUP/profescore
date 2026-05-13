@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useApp, CATEGORIA_COLORS, timeAgo, avgRating, ratingPillClass } from "../context";
-import { RichDisplay } from "../RichEditor";
+import { RichDisplay } from "../../RichEditor";
 
 export default function HomePage() {
   const { session, perfil, profesores, resenas, hilos, respuestas, mensajes, perfilesMap, unreadCount } = useApp();
