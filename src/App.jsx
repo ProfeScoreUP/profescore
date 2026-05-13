@@ -1,4 +1,4 @@
-﻿import { Routes, Route } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import { AppContext, useAppData } from "./context";
 import Sidebar from "./Sidebar";
 import HomePage from "./pages/Home";
