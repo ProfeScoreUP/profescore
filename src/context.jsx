@@ -109,6 +109,11 @@ export function Avatar({url,name,size=44,fontSize=14}){
   return<div style={{width:size,height:size,borderRadius:"50%",background:c.bg,color:c.color,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize,flexShrink:0}}>{initials(name)}</div>;
 }
 
+export async function crearNotificacion({ user_id, tipo, texto, link }) {
+  if(!user_id) return;
+  await supabase.from("notificaciones").insert({ user_id, tipo, texto, link, leida: false });
+}
+
 export function useAppData(){
   const [session,setSession]=useState(null);
   const [perfil,setPerfil]=useState(null);
@@ -125,6 +130,8 @@ export function useAppData(){
   const [unreadCount,setUnreadCount]=useState(0);
   const [actividadReciente,setActividadReciente]=useState([]);
   const [darkMode,setDarkMode]=useState(false);
+  const [notificaciones,setNotificaciones]=useState([]);
+  const [notifCount,setNotifCount]=useState(0);
 
   useEffect(()=>{
     const saved=localStorage.getItem("darkMode");
@@ -135,7 +142,7 @@ export function useAppData(){
     return()=>subscription.unsubscribe();
   },[]);
 
-  useEffect(()=>{if(session)fetchMensajes();},[session]);
+  useEffect(()=>{if(session){fetchMensajes();fetchNotificaciones();}else{setNotificaciones([]);setNotifCount(0);}},[session]);
 
   function toggleDark(){
     const next=!darkMode;setDarkMode(next);
@@ -144,6 +151,20 @@ export function useAppData(){
   }
 
   async function fetchPerfil(userId){const{data}=await supabase.from("perfiles").select("*").eq("id",userId).single();setPerfil(data||null);}
+
+  async function fetchNotificaciones(){
+    if(!session)return;
+    const{data}=await supabase.from("notificaciones").select("*").eq("user_id",session.user.id).order("created_at",{ascending:false}).limit(20);
+    setNotificaciones(data||[]);
+    setNotifCount((data||[]).filter(n=>!n.leida).length);
+  }
+
+  async function marcarTodasLeidas(){
+    if(!session)return;
+    await supabase.from("notificaciones").update({leida:true}).eq("user_id",session.user.id).eq("leida",false);
+    setNotificaciones(prev=>prev.map(n=>({...n,leida:true})));
+    setNotifCount(0);
+  }
 
   async function fetchAll(){
     setLoading(true);
@@ -188,5 +209,6 @@ export function useAppData(){
     session,perfil,setPerfil,perfilesMap,profesores,resenas,materias,votos,setVotos,
     comentarios,mensajes,setMensajes,hilos,respuestas,loading,unreadCount,actividadReciente,
     darkMode,toggleDark,fetchAll,fetchPerfil,fetchMensajes,handleLogout,
+    notificaciones,notifCount,fetchNotificaciones,marcarTodasLeidas,
   };
 }

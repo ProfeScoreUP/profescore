@@ -5,11 +5,12 @@ import AuthModal from "./modals/AuthModal";
 import UsernameModal from "./modals/UsernameModal";
 
 export default function Sidebar() {
-  const { session, perfil, unreadCount, actividadReciente, darkMode, toggleDark, handleLogout } = useApp();
+  const { session, perfil, unreadCount, actividadReciente, darkMode, toggleDark, handleLogout, notificaciones, notifCount, marcarTodasLeidas } = useApp();
   const navigate = useNavigate();
   const [showAuth, setShowAuth] = useState(false);
   const [showUsername, setShowUsername] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [showNotif, setShowNotif] = useState(false);
 
   function tipoIcon(tipo) {
     if(tipo==="reseña") return "⭐";
@@ -21,6 +22,11 @@ export default function Sidebar() {
 
   function closeMobile() { setMobileOpen(false); }
 
+  function handleNotifClick() {
+    setShowNotif(!showNotif);
+    if(!showNotif && notifCount > 0) marcarTodasLeidas();
+  }
+
   const navLinks = [["/materias","📚","Materias"],["/profesores","👨‍🏫","Profesores"],["/foro","💬","Foro"],["/comunidad","👥","Comunidad"],["/acerca","ℹ️","Acerca de"]];
   const actLinks = [
     ["/mensajes","✉️","Mensajes",unreadCount],
@@ -28,6 +34,26 @@ export default function Sidebar() {
     ["/mis-comentarios","💬","Mis comentarios",0],
     ["/resenas-votadas","👍","Reseñas votadas",0],
   ];
+
+  const NotifPanel = () => (
+    <div style={{position:"absolute",left:"100%",top:0,marginLeft:8,width:300,background:"var(--surface)",border:"1px solid var(--border)",borderRadius:12,boxShadow:"0 4px 20px rgba(0,0,0,0.12)",zIndex:100,overflow:"hidden"}}>
+      <div style={{padding:"12px 14px",borderBottom:"1px solid var(--border2)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <span style={{fontSize:13,fontWeight:500,color:"var(--text)"}}>Notificaciones</span>
+        {notificaciones.length>0&&<button className="link-btn" style={{fontSize:11}} onClick={marcarTodasLeidas}>Marcar todas como leídas</button>}
+      </div>
+      {notificaciones.length===0&&<div style={{padding:"1.5rem",fontSize:13,color:"var(--text3)",textAlign:"center"}}>No tenés notificaciones</div>}
+      {notificaciones.map(n=>(
+        <div key={n.id} onClick={()=>{if(n.link)navigate(n.link);setShowNotif(false);}} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 14px",borderBottom:"1px solid var(--border2)",cursor:n.link?"pointer":"default",background:n.leida?"transparent":"var(--accent-bg)",transition:"background 0.12s"}} onMouseEnter={e=>{if(n.link)e.currentTarget.style.background="var(--surface2)"}} onMouseLeave={e=>e.currentTarget.style.background=n.leida?"transparent":"var(--accent-bg)"}>
+          <span style={{fontSize:16,flexShrink:0}}>{tipoIcon(n.tipo)}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:12,color:"var(--text)",lineHeight:1.4}}>{n.texto}</div>
+            <div style={{fontSize:11,color:"var(--text4)",marginTop:3}}>{timeAgo(n.created_at)}</div>
+          </div>
+          {!n.leida&&<div style={{width:7,height:7,borderRadius:"50%",background:"var(--accent)",flexShrink:0,marginTop:4}}/>}
+        </div>
+      ))}
+    </div>
+  );
 
   const sidebarContent = (
     <>
@@ -58,6 +84,16 @@ export default function Sidebar() {
             {badge>0&&<span className="sidebar-badge">{badge}</span>}
           </NavLink>
         ))}
+
+        {/* NOTIFICACIONES */}
+        <div style={{position:"relative"}}>
+          <button className="sidebar-item" style={{width:"100%"}} onClick={handleNotifClick}>
+            <span className="icon">🔔</span>
+            Notificaciones
+            {notifCount>0&&<span className="sidebar-badge">{notifCount}</span>}
+          </button>
+          {showNotif&&<NotifPanel/>}
+        </div>
       </div>}
 
       <div className="sidebar-section">
