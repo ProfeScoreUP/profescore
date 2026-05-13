@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase";
-import { useApp, starsStr, tagClass, timeAgo, isAdmin, Avatar, initials, colorFor, COLORS } from "./context";
+import { useApp, starsStr, tagClass, timeAgo, isAdmin, Avatar, initials, colorFor, COLORS, crearNotificacion } from "./context";
 import { RichDisplay } from "./RichEditor";
 
 export default function ReviewCard({ r, showProf = false }) {
@@ -39,6 +39,15 @@ export default function ReviewCard({ r, showProf = false }) {
   async function handleComment() {
     if(!session||!perfil||!comText.trim()) return;
     await supabase.from("comentarios").insert({resena_id:r.id,user_id:session.user.id,username:perfil.username,texto:comText.trim()});
+    // Notificar al autor de la reseña (si no es el mismo que comenta)
+    if(r.user_id && r.user_id !== session.user.id) {
+      await crearNotificacion({
+        user_id: r.user_id,
+        tipo: "comentario",
+        texto: `@${perfil.username} comentó tu reseña de ${prof?.nombre||"un profesor"}`,
+        link: `/profesor/${r.profesor_id}`,
+      });
+    }
     setComText("");
     await fetchAll();
   }
@@ -70,11 +79,7 @@ export default function ReviewCard({ r, showProf = false }) {
 
       <div className="review-top">
         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-          {/* Avatar del autor */}
-          <div
-            style={{cursor: r.user_id ? "pointer" : "default"}}
-            onClick={()=>r.user_id&&navigate(`/perfil/${r.user_id}`)}
-          >
+          <div style={{cursor: r.user_id ? "pointer" : "default"}} onClick={()=>r.user_id&&navigate(`/perfil/${r.user_id}`)}>
             {userPerfil?.foto_url
               ? <img src={userPerfil.foto_url} alt={authorName} style={{width:28,height:28,borderRadius:"50%",objectFit:"cover"}}/>
               : <div style={{width:28,height:28,borderRadius:"50%",background:authorColor.bg,color:authorColor.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600}}>{initials(authorName)}</div>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../supabase";
-import { useApp, CATEGORIA_COLORS, timeAgo, Avatar, isAdmin } from "../context";
+import { useApp, CATEGORIA_COLORS, timeAgo, Avatar, isAdmin, crearNotificacion } from "../context";
 import { RichDisplay } from "../RichEditor";
 import RichEditor from "../RichEditor";
 import UsernameModal from "../modals/UsernameModal";
@@ -31,7 +31,17 @@ export default function HiloPage() {
       username: perfil.username,
       texto: respuestaTexto,
     });
-    setRespuestaTexto(""); await fetchAll();
+    // Notificar al autor del hilo (si no es el mismo que responde)
+    if(hilo.user_id && hilo.user_id !== session.user.id) {
+      await crearNotificacion({
+        user_id: hilo.user_id,
+        tipo: "respuesta",
+        texto: `@${perfil.username} respondió tu hilo "${hilo.titulo}"`,
+        link: `/foro/${hilo.id}`,
+      });
+    }
+    setRespuestaTexto("");
+    await fetchAll();
   }
 
   async function deleteRespuesta(r) {
@@ -94,12 +104,7 @@ export default function HiloPage() {
                 {rp?.carrera&&<span className="comment-carrera">{rp.carrera}</span>}
                 <span className="comment-date">{timeAgo(r.created_at)}</span>
                 {canDeleteRespuesta(r)&&(
-                  <button
-                    className="review-action-btn delete"
-                    style={{fontSize:11,padding:"2px 8px",marginLeft:"auto"}}
-                    disabled={deletingId===r.id}
-                    onClick={()=>deleteRespuesta(r)}
-                  >
+                  <button className="review-action-btn delete" style={{fontSize:11,padding:"2px 8px",marginLeft:"auto"}} disabled={deletingId===r.id} onClick={()=>deleteRespuesta(r)}>
                     {deletingId===r.id?"...":"🗑"}
                   </button>
                 )}
