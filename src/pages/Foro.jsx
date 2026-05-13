@@ -6,6 +6,20 @@ import RichEditor from "../RichEditor";
 import UsernameModal from "../modals/UsernameModal";
 import AuthModal from "../modals/AuthModal";
 
+const PER_PAGE = 10;
+
+function Paginacion({ page, total, onPrev, onNext }) {
+  const totalPages = Math.ceil(total / PER_PAGE);
+  if(totalPages <= 1) return null;
+  return (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12,margin:"1rem 0",fontSize:13,color:"var(--text3)"}}>
+      <button className="btn-outline" style={{padding:"5px 14px",fontSize:12}} onClick={onPrev} disabled={page===0}>← Anterior</button>
+      <span>{page+1} / {totalPages}</span>
+      <button className="btn-outline" style={{padding:"5px 14px",fontSize:12}} onClick={onNext} disabled={(page+1)*PER_PAGE>=total}>Siguiente →</button>
+    </div>
+  );
+}
+
 export default function ForoPage() {
   const { session, perfil, hilos, respuestas, fetchAll } = useApp();
   const navigate = useNavigate();
@@ -19,20 +33,26 @@ export default function ForoPage() {
   const [cat, setCat] = useState(CATEGORIAS_FORO[0]);
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [page, setPage] = useState(0);
 
   const admin = session && isAdmin(session.user.id);
 
-  const filtrados = hilos.filter(h=>{
+  const fijados = hilos.filter(h=>{
     const catMatch = !foroCat||h.categoria===foroCat;
     const q = foroSearch.toLowerCase();
     const textMatch = !q||h.titulo.toLowerCase().includes(q)||h.contenido.toLowerCase().includes(q)||(respuestas[h.id]||[]).some(r=>r.texto.toLowerCase().includes(q));
-    return catMatch&&textMatch;
-  }).sort((a,b)=>{
-    // Fijados primero
-    if(a.fijado&&!b.fijado) return -1;
-    if(!a.fijado&&b.fijado) return 1;
-    return new Date(b.created_at)-new Date(a.created_at);
+    return catMatch&&textMatch&&h.fijado;
   });
+
+  const noFijados = hilos.filter(h=>{
+    const catMatch = !foroCat||h.categoria===foroCat;
+    const q = foroSearch.toLowerCase();
+    const textMatch = !q||h.titulo.toLowerCase().includes(q)||h.contenido.toLowerCase().includes(q)||(respuestas[h.id]||[]).some(r=>r.texto.toLowerCase().includes(q));
+    return catMatch&&textMatch&&!h.fijado;
+  }).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+
+  const paginated = noFijados.slice(page*PER_PAGE, (page+1)*PER_PAGE);
+  const filtrados = [...fijados, ...paginated];
 
   function openNewHilo() {
     if(!session) { setShowAuthModal(true); return; }
@@ -81,15 +101,16 @@ export default function ForoPage() {
       </div>
 
       <div className="search-bar" style={{marginBottom:"0.75rem"}}>
-        <input value={foroSearch} onChange={e=>setForoSearch(e.target.value)} placeholder="Buscar en el foro..."/>
+        <input value={foroSearch} onChange={e=>{setForoSearch(e.target.value);setPage(0);}} placeholder="Buscar en el foro..."/>
       </div>
 
       <div className="cat-filter-row">
-        <button className={`cat-filter-btn${!foroCat?" active":""}`} onClick={()=>setForoCat("")}>Todos</button>
-        {CATEGORIAS_FORO.map(c=><button key={c} className={`cat-filter-btn${foroCat===c?" active":""}`} onClick={()=>setForoCat(c)}>{c}</button>)}
+        <button className={`cat-filter-btn${!foroCat?" active":""}`} onClick={()=>{setForoCat("");setPage(0);}}>Todos</button>
+        {CATEGORIAS_FORO.map(c=><button key={c} className={`cat-filter-btn${foroCat===c?" active":""}`} onClick={()=>{setForoCat(c);setPage(0);}}>{c}</button>)}
       </div>
 
       {filtrados.length===0&&<div className="empty">No hay hilos todavía</div>}
+      {noFijados.length>0&&<div style={{fontSize:12,color:"var(--text3)",marginBottom:8}}>{noFijados.length} hilo{noFijados.length!==1?"s":""} en total</div>}
 
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         {filtrados.map(h=>(
@@ -112,21 +133,12 @@ export default function ForoPage() {
                 </div>
                 <div style={{display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
                   {admin&&(
-                    <button
-                      className="review-action-btn admin"
-                      style={{fontSize:11,padding:"2px 8px"}}
-                      onClick={e=>toggleFijar(e,h)}
-                    >
+                    <button className="review-action-btn admin" style={{fontSize:11,padding:"2px 8px"}} onClick={e=>toggleFijar(e,h)}>
                       {h.fijado?"Desfijar":"📌 Fijar"}
                     </button>
                   )}
                   {canDelete(h)&&(
-                    <button
-                      className="review-action-btn delete"
-                      style={{fontSize:11,padding:"2px 8px"}}
-                      disabled={deletingId===h.id}
-                      onClick={e=>deleteHilo(e,h)}
-                    >
+                    <button className="review-action-btn delete" style={{fontSize:11,padding:"2px 8px"}} disabled={deletingId===h.id} onClick={e=>deleteHilo(e,h)}>
                       {deletingId===h.id?"...":"🗑"}
                     </button>
                   )}
@@ -137,6 +149,8 @@ export default function ForoPage() {
         ))}
       </div>
 
+      <Paginacion page={page} total={noFijados.length} onPrev={()=>setPage(p=>p-1)} onNext={()=>setPage(p=>p+1)}/>
+
       {showUsername&&<UsernameModal onClose={()=>setShowUsername(false)}/>}
       {showAuthModal&&<AuthModal onClose={()=>setShowAuthModal(false)} onNeedUsername={()=>{setShowAuthModal(false);setShowUsername(true);}}/>}
 
@@ -144,20 +158,9 @@ export default function ForoPage() {
         <div className="modal-overlay" onClick={()=>setShowNewHilo(false)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <div className="modal-title">Nuevo hilo de discusión</div>
-            <div className="form-group">
-              <label className="form-label">Categoría</label>
-              <select value={cat} onChange={e=>setCat(e.target.value)}>
-                {CATEGORIAS_FORO.map(c=><option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Título</label>
-              <input value={titulo} onChange={e=>setTitulo(e.target.value)} placeholder="¿Sobre qué querés hablar?"/>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Contenido</label>
-              <RichEditor value={contenido} onChange={setContenido} placeholder="Desarrollá tu pregunta o tema..."/>
-            </div>
+            <div className="form-group"><label className="form-label">Categoría</label><select value={cat} onChange={e=>setCat(e.target.value)}>{CATEGORIAS_FORO.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
+            <div className="form-group"><label className="form-label">Título</label><input value={titulo} onChange={e=>setTitulo(e.target.value)} placeholder="¿Sobre qué querés hablar?"/></div>
+            <div className="form-group"><label className="form-label">Contenido</label><RichEditor value={contenido} onChange={setContenido} placeholder="Desarrollá tu pregunta o tema..."/></div>
             <div className="foro-hint">💡 Podés pegar links de imágenes (imgur.com) o archivos (drive.google.com).</div>
             <div className="modal-actions">
               <button className="btn-cancel" onClick={()=>setShowNewHilo(false)}>Cancelar</button>

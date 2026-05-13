@@ -4,6 +4,20 @@ import { useApp, ALL_TAGS, colorFor, initials, avgRating, ratingPillClass, tagCl
 import { supabase } from "../supabase";
 import AuthModal from "../modals/AuthModal";
 
+const PER_PAGE = 10;
+
+function Paginacion({ page, total, onPrev, onNext }) {
+  const totalPages = Math.ceil(total / PER_PAGE);
+  if(totalPages <= 1) return null;
+  return (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12,margin:"1rem 0",fontSize:13,color:"var(--text3)"}}>
+      <button className="btn-outline" style={{padding:"5px 14px",fontSize:12}} onClick={onPrev} disabled={page===0}>← Anterior</button>
+      <span>{page+1} / {totalPages}</span>
+      <button className="btn-outline" style={{padding:"5px 14px",fontSize:12}} onClick={onNext} disabled={(page+1)*PER_PAGE>=total}>Siguiente →</button>
+    </div>
+  );
+}
+
 export default function ProfesoresPage() {
   const { session, profesores, resenas, materias, fetchAll } = useApp();
   const navigate = useNavigate();
@@ -15,6 +29,7 @@ export default function ProfesoresPage() {
   const [modalidadFilter, setModalidadFilter] = useState("");
   const [tagFilter, setTagFilter] = useState([]);
   const [tab, setTab] = useState("recientes");
+  const [page, setPage] = useState(0);
   const [showNewProfModal, setShowNewProfModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [newNombre, setNewNombre] = useState("");
@@ -27,7 +42,8 @@ export default function ProfesoresPage() {
   const admin = session && isAdmin(session.user.id);
   const depts = [...new Set(profesores.map(p=>p.departamento))].sort();
 
-  function toggleTag(t) { setTagFilter(prev=>prev.includes(t)?prev.filter(x=>x!==t):[...prev,t]); }
+  function toggleTag(t) { setTagFilter(prev=>prev.includes(t)?prev.filter(x=>x!==t):[...prev,t]); setPage(0); }
+  function resetPage() { setPage(0); }
 
   function openNewProf() {
     if(!session) { setShowAuthModal(true); return; }
@@ -58,7 +74,6 @@ export default function ProfesoresPage() {
     e.stopPropagation();
     if(!window.confirm(`¿Eliminar al profesor "${p.nombre}" y todas sus reseñas?`)) return;
     setDeletingId(p.id);
-    // Eliminar votos y comentarios de sus reseñas
     const profResenas = resenas[p.id] || [];
     for(const r of profResenas) {
       await supabase.from("votos").delete().eq("resena_id", r.id);
@@ -92,6 +107,8 @@ export default function ProfesoresPage() {
     return b.lastRev-a.lastRev;
   });
 
+  const paginated = filtered.slice(page*PER_PAGE, (page+1)*PER_PAGE);
+
   return (
     <>
       <div className="header">
@@ -102,12 +119,12 @@ export default function ProfesoresPage() {
       </div>
 
       <div className="search-bar">
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Buscar profesor o materia..."/>
-        <select value={deptFilter} onChange={e=>setDeptFilter(e.target.value)}>
+        <input value={search} onChange={e=>{setSearch(e.target.value);resetPage();}} placeholder="Buscar profesor o materia..."/>
+        <select value={deptFilter} onChange={e=>{setDeptFilter(e.target.value);resetPage();}}>
           <option value="">Todas las áreas</option>
           {depts.map(d=><option key={d} value={d}>{d}</option>)}
         </select>
-        <select value={modalidadFilter} onChange={e=>setModalidadFilter(e.target.value)}>
+        <select value={modalidadFilter} onChange={e=>{setModalidadFilter(e.target.value);resetPage();}}>
           <option value="">Presencial y online</option>
           <option value="Presencial">Presencial</option>
           <option value="Online">Online</option>
@@ -120,20 +137,21 @@ export default function ProfesoresPage() {
           {ALL_TAGS.map(t=>(
             <button key={t} className={`tag-filter-btn${tagFilter.includes(t)?" active":""}`} onClick={()=>toggleTag(t)}>{t}</button>
           ))}
-          {tagFilter.length>0&&<button className="tag-filter-btn" onClick={()=>setTagFilter([])}>✕ Limpiar</button>}
+          {tagFilter.length>0&&<button className="tag-filter-btn" onClick={()=>{setTagFilter([]);resetPage();}}>✕ Limpiar</button>}
         </div>
       </div>
 
       <div className="tabs">
         {[["recientes","Actividad reciente"],["mejor","Mejor calificados"],["todos","Más reseñas"]].map(([k,l])=>(
-          <button key={k} className={`tab${tab===k?" active":""}`} onClick={()=>setTab(k)}>{l}</button>
+          <button key={k} className={`tab${tab===k?" active":""}`} onClick={()=>{setTab(k);resetPage();}}>{l}</button>
         ))}
       </div>
 
       {filtered.length===0&&<div className="empty">No se encontraron profesores</div>}
+      {filtered.length>0&&<div style={{fontSize:12,color:"var(--text3)",marginBottom:8}}>{filtered.length} profesor{filtered.length!==1?"es":""} encontrado{filtered.length!==1?"s":""}</div>}
 
       <div className="prof-list">
-        {filtered.map((p,i)=>{
+        {paginated.map((p,i)=>{
           const c=colorFor(i);
           let revs=resenas[p.id]||[];
           if(modalidadFilter)revs=revs.filter(r=>r.modalidad===modalidadFilter);
@@ -154,12 +172,7 @@ export default function ProfesoresPage() {
                 </div>
               </div>
               {admin&&(
-                <button
-                  className="review-action-btn delete"
-                  style={{position:"absolute",top:10,right:10,fontSize:11,padding:"2px 8px"}}
-                  disabled={deletingId===p.id}
-                  onClick={e=>deleteProfesor(e,p)}
-                >
+                <button className="review-action-btn delete" style={{position:"absolute",top:10,right:10,fontSize:11,padding:"2px 8px"}} disabled={deletingId===p.id} onClick={e=>deleteProfesor(e,p)}>
                   {deletingId===p.id?"...":"🗑"}
                 </button>
               )}
@@ -168,7 +181,9 @@ export default function ProfesoresPage() {
         })}
       </div>
 
-      <button className="add-review-btn" style={{marginTop:"1rem"}} onClick={openNewProf}>
+      <Paginacion page={page} total={filtered.length} onPrev={()=>setPage(p=>p-1)} onNext={()=>setPage(p=>p+1)}/>
+
+      <button className="add-review-btn" style={{marginTop:"0.5rem"}} onClick={openNewProf}>
         ＋ No encontré al profesor — agregar nuevo
       </button>
       {!session&&(
@@ -183,21 +198,10 @@ export default function ProfesoresPage() {
         <div className="modal-overlay" onClick={()=>setShowNewProfModal(false)}>
           <div className="modal" onClick={e=>e.stopPropagation()}>
             <div className="modal-title">Agregar profesor nuevo</div>
-            <div className="info-box">
-              Antes de agregar, asegurate de buscarlo arriba. El nombre debe estar completo y bien escrito.
-            </div>
-            <div className="form-group">
-              <label className="form-label">Nombre completo *</label>
-              <input value={newNombre} onChange={e=>setNewNombre(e.target.value)} placeholder="Ej: María García"/>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Área / Departamento</label>
-              <input value={newDepto} onChange={e=>setNewDepto(e.target.value)} placeholder="Ej: Matemáticas, Economía..."/>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Materia que dicta</label>
-              <input value={newMateria} onChange={e=>setNewMateria(e.target.value)} placeholder="Ej: Cálculo I"/>
-            </div>
+            <div className="info-box">Antes de agregar, asegurate de buscarlo arriba. El nombre debe estar completo y bien escrito.</div>
+            <div className="form-group"><label className="form-label">Nombre completo *</label><input value={newNombre} onChange={e=>setNewNombre(e.target.value)} placeholder="Ej: María García"/></div>
+            <div className="form-group"><label className="form-label">Área / Departamento</label><input value={newDepto} onChange={e=>setNewDepto(e.target.value)} placeholder="Ej: Matemáticas, Economía..."/></div>
+            <div className="form-group"><label className="form-label">Materia que dicta</label><input value={newMateria} onChange={e=>setNewMateria(e.target.value)} placeholder="Ej: Cálculo I"/></div>
             {profMsg&&<div className="auth-msg">{profMsg}</div>}
             <div className="modal-actions">
               <button className="btn-cancel" onClick={()=>setShowNewProfModal(false)}>Cancelar</button>
