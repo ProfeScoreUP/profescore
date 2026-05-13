@@ -1,9 +1,13 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp, CATEGORIA_COLORS, timeAgo, avgRating, ratingPillClass, initials, colorFor, COLORS } from "../context";
 import { RichDisplay } from "../RichEditor";
+import AuthModal from "../modals/AuthModal";
+import UsernameModal from "../modals/UsernameModal";
 
-function Avatar({ name, size = 36 }) {
+function Avatar({ name, url, size = 36 }) {
   const c = colorFor((name || "").charCodeAt(0) % COLORS.length);
+  if(url) return <img src={url} alt={name} style={{width:size,height:size,borderRadius:"50%",objectFit:"cover",flexShrink:0}}/>;
   return (
     <div style={{
       width: size, height: size, borderRadius: "50%",
@@ -16,9 +20,17 @@ function Avatar({ name, size = 36 }) {
   );
 }
 
+const LINKS_UP = [
+  { icon: "🎓", title: "Campus Virtual", url: "https://campus.palermo.edu/" },
+  { icon: "📱", title: "MyUP", url: "https://myup.palermo.edu/" },
+  { icon: "💼", title: "Office 365", url: "https://www.office.com/" },
+];
+
 export default function HomePage() {
   const { session, perfil, profesores, resenas, hilos, respuestas, mensajes, perfilesMap, unreadCount } = useApp();
   const navigate = useNavigate();
+  const [showAuth, setShowAuth] = useState(false);
+  const [showUsername, setShowUsername] = useState(false);
 
   const allResenas = Object.values(resenas).flat();
   const ultimasResenas = allResenas.slice(0, 4);
@@ -66,14 +78,34 @@ export default function HomePage() {
 
       {/* HERO */}
       <div className="dash-hero">
-        <div>
-          <h1 style={{ fontSize: 18, fontWeight: 500, color: "var(--text)", marginBottom: 2 }}>
-            {session && perfil ? <>Bienvenido, <span style={{ color: "var(--accent)" }}>@{perfil.username}</span></> : "Bienvenido a ProfeScore"}
-          </h1>
-          <p style={{ fontSize: 13, color: "var(--text3)", marginBottom: "1rem" }}>
-            Universidad de Palermo · ProfeScore
-          </p>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: "1rem" }}>
+          <div>
+            <h1 style={{ fontSize: 18, fontWeight: 500, color: "var(--text)", marginBottom: 2 }}>
+              {session && perfil
+                ? <>Bienvenido, <span style={{ color: "var(--accent)" }}>@{perfil.username}</span></>
+                : "Bienvenido a ProfeScore"}
+            </h1>
+            <p style={{ fontSize: 13, color: "var(--text3)" }}>
+              Universidad de Palermo · ProfeScore
+            </p>
+          </div>
+
+          {/* Avatar o botón login */}
+          {session && perfil ? (
+            <div
+              style={{ cursor: "pointer", flexShrink: 0 }}
+              onClick={() => navigate(`/perfil/${session.user.id}`)}
+              title="Ver mi perfil"
+            >
+              <Avatar name={perfil.username} url={perfil.foto_url} size={42} />
+            </div>
+          ) : (
+            <button className="btn-primary" style={{ fontSize: 12, padding: "7px 14px", whiteSpace: "nowrap", flexShrink: 0 }} onClick={() => setShowAuth(true)}>
+              Iniciar sesión
+            </button>
+          )}
         </div>
+
         <div className="dash-stats">
           {[
             { icon: "👨‍🏫", val: totalProfs, lbl: "Profesores" },
@@ -197,15 +229,20 @@ export default function HomePage() {
             </span>
             <button className="link-btn" onClick={() => navigate("/mensajes")}>Ver todo →</button>
           </div>
-          {!session && <p style={{ padding: "1rem", fontSize: 13, color: "var(--text3)" }}>Iniciá sesión para ver tus mensajes.</p>}
+          {!session && (
+            <div style={{ padding: "1rem" }}>
+              <p style={{ fontSize: 13, color: "var(--text3)", marginBottom: 8 }}>Iniciá sesión para ver tus mensajes.</p>
+              <button className="btn-primary" style={{ fontSize: 12, padding: "6px 14px" }} onClick={() => setShowAuth(true)}>Iniciar sesión</button>
+            </div>
+          )}
           {session && conversations.length === 0 && <p style={{ padding: "1rem", fontSize: 13, color: "var(--text3)" }}>No hay mensajes aún.</p>}
           {session && conversations.map(conv => {
             const op = perfilesMap[conv.otherId] || { username: "Usuario" };
             const hasUnread = conv.unread > 0;
             return (
               <div key={conv.otherId} className="dash-list-item" onClick={() => navigate(`/mensajes/${conv.otherId}`)}>
-                {hasUnread && <div style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--accent)", flexShrink: 0 }} />}
-                <Avatar name={op.username} />
+                {hasUnread && <div style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--accent)", flexShrink: 0, marginTop: 6 }} />}
+                <Avatar name={op.username} url={op.foto_url} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: hasUnread ? 600 : 400, color: "var(--text)" }}>@{op.username}</div>
                   <div style={{ fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 1 }}>{conv.lastMsg.texto}</div>
@@ -217,6 +254,36 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* LINKS UNIVERSIDAD */}
+      <div className="dash-card">
+        <div className="dash-card-header">
+          <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>🏛️ Links de la universidad</span>
+        </div>
+        <div style={{ display: "flex", gap: 0 }}>
+          {LINKS_UP.map((l, i) => (
+            <a
+              key={l.title}
+              href={l.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+                padding: "14px 10px", textDecoration: "none",
+                borderRight: i < LINKS_UP.length - 1 ? "1px solid var(--border2)" : "none",
+                transition: "background 0.12s",
+              }}
+              onMouseEnter={e=>e.currentTarget.style.background="var(--surface2)"}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+            >
+              <span style={{ fontSize: 22 }}>{l.icon}</span>
+              <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text)", textAlign: "center" }}>{l.title}</span>
+            </a>
+          ))}
+        </div>
+      </div>
+
+      {showAuth && <AuthModal onClose={() => setShowAuth(false)} onNeedUsername={() => { setShowAuth(false); setShowUsername(true); }} />}
+      {showUsername && <UsernameModal onClose={() => setShowUsername(false)} />}
     </div>
   );
 }
