@@ -23,7 +23,7 @@ export default function Sidebar() {
       <div className="sidebar">
 <div className="sidebar-logo" onClick={() => navigate("/")} style={{cursor:"pointer"}}>
   <div className="sidebar-logo-row">
-            <img src={UP_LOGO} alt="UP" className="sidebar-logo-img" onError={e=>e.target.style.display="none"}/>
+            <img src="/logo.svg" alt="ProfeScore" className="sidebar-logo-img"/>
             <div>
               <div className="logo" style={{fontSize:16}}><div className="dot"/>ProfeScore</div>
               <div className="subtitle">Universidad de Palermo</div>
