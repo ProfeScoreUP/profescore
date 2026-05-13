@@ -33,7 +33,7 @@ export default function Sidebar() {
 
         <div className="sidebar-section">
           <div className="sidebar-section-title">Explorar</div>
-          {[["/ ","📚","Materias"],["/profesores","👨‍🏫","Profesores"],["/foro","💬","Foro"],["/comunidad","👥","Comunidad"],["/acerca","ℹ️","Acerca de"]].map(([path,icon,label])=>(
+          {[["/materias","📚","Materias"],["/profesores","👨‍🏫","Profesores"],["/foro","💬","Foro"],["/comunidad","👥","Comunidad"],["/acerca","ℹ️","Acerca de"]].map(([path,icon,label])=>(
             <NavLink key={path} to={path} className={({isActive})=>`sidebar-item${isActive?" active":""}`} style={{textDecoration:"none"}}>
               <span className="icon">{icon}</span>{label}
             </NavLink>
