@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../supabase";
-import { useApp, colorFor, initials, avgRating, ratingPillClass, tagClass, starsStr, isAdmin, isUP, ALL_TAGS, PREGUNTAS_ONLINE, PREGUNTAS_PRESENCIAL, DISCLAIMER, randomUsername } from "../context";
+import { useApp, colorFor, initials, avgRating, ratingPillClass, tagClass, isAdmin, isUP, ALL_TAGS, PREGUNTAS_ONLINE, PREGUNTAS_PRESENCIAL, DISCLAIMER } from "../context";
 import ReviewCard from "../ReviewCard";
 import RichEditor from "../RichEditor";
 import UsernameModal from "../modals/UsernameModal";
+import AuthModal from "../modals/AuthModal";
 
 function aiSummary(prof, reviews) {
   if(!reviews.length) return "";
@@ -22,7 +23,7 @@ function aiSummary(prof, reviews) {
 export default function ProfesorPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { session, perfil, profesores, resenas, materias, votos, fetchAll, fetchPerfil } = useApp();
+  const { session, perfil, profesores, resenas, materias, votos, fetchAll } = useApp();
 
   const prof = profesores.find(p=>p.id===id);
   const profRevs = resenas[id] || [];
@@ -33,14 +34,16 @@ export default function ProfesorPage() {
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [showUsernameModal, setShowUsernameModal] = useState(false);
   const [showEditFotoModal, setShowEditFotoModal] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [fotoUrl, setFotoUrl] = useState("");
   const [selectedStar, setSelectedStar] = useState(0);
   const [selectedTags, setSelectedTags] = useState([]);
   const [revText, setRevText] = useState("");
   const [revMateria, setRevMateria] = useState("");
   const [revModalidad, setRevModalidad] = useState("Presencial");
-  const [guestEmail, setGuestEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [isNewMateria, setIsNewMateria] = useState(false);
+  const [newMateriaInput, setNewMateriaInput] = useState("");
 
   if(!prof) return <div className="empty">Profesor no encontrado</div>;
 
@@ -70,32 +73,58 @@ export default function ProfesorPage() {
   const preguntas = revModalidad==="Online" ? PREGUNTAS_ONLINE : PREGUNTAS_PRESENCIAL;
 
   function openReview() {
-    if(session&&!perfil){setShowUsernameModal(true);return;}
+    if(!session) { setShowAuthModal(true); return; }
+    if(!perfil) { setShowUsernameModal(true); return; }
     setRevMateria((prof.materias||[])[0]||"");
-    setSelectedStar(0);setSelectedTags([]);setRevText("");setRevModalidad("Presencial");
-    setGuestEmail("");setShowReviewModal(true);
+    setSelectedStar(0); setSelectedTags([]); setRevText(""); setRevModalidad("Presencial");
+    setIsNewMateria(false); setNewMateriaInput("");
+    setShowReviewModal(true);
   }
 
   async function submitReview() {
-    if(!selectedStar){alert("Por favor seleccioná una calificación");return;}
-    if(!revText||revText==="<p></p>"){alert("Por favor escribí tu opinión");return;}
+    if(!selectedStar) { alert("Por favor seleccioná una calificación"); return; }
+    if(!revText||revText==="<p></p>") { alert("Por favor escribí tu opinión"); return; }
+    const materiaFinal = isNewMateria ? newMateriaInput.trim() : revMateria;
+    if(!materiaFinal) { alert("Por favor ingresá la materia"); return; }
     setSubmitting(true);
-    const userEmail = session?session.user.email:guestEmail.trim();
-    await supabase.from("resenas").insert({profesor_id:prof.id,materia:revMateria,rating:selectedStar,texto:revText,tags:selectedTags,modalidad:revModalidad,user_email:userEmail,verified:isUP(userEmail),is_guest:!session,user_id:session?.user?.id||null,username:perfil?.username||null});
-    await fetchAll();setShowReviewModal(false);setSubmitting(false);
-    setSelectedStar(0);setSelectedTags([]);setRevText("");setGuestEmail("");
+
+    if(isNewMateria && newMateriaInput.trim()) {
+      const updatedMaterias = [...(prof.materias||[]), newMateriaInput.trim()];
+      await supabase.from("profesores").update({ materias: updatedMaterias }).eq("id", prof.id);
+      const existe = materias.find(m=>m.nombre.toLowerCase()===newMateriaInput.trim().toLowerCase());
+      if(!existe) await supabase.from("materias").insert({ nombre: newMateriaInput.trim() });
+    }
+
+    await supabase.from("resenas").insert({
+      profesor_id: prof.id,
+      materia: materiaFinal,
+      rating: selectedStar,
+      texto: revText,
+      tags: selectedTags,
+      modalidad: revModalidad,
+      user_email: session.user.email,
+      verified: isUP(session.user.email),
+      is_guest: false,
+      user_id: session.user.id,
+      username: perfil?.username||null,
+    });
+    await fetchAll();
+    setShowReviewModal(false); setSubmitting(false);
+    setSelectedStar(0); setSelectedTags([]); setRevText("");
   }
 
   async function saveFoto() {
     await supabase.from("profesores").update({foto_url:fotoUrl}).eq("id",prof.id);
-    await fetchAll();setShowEditFotoModal(false);setFotoUrl("");
+    await fetchAll(); setShowEditFotoModal(false); setFotoUrl("");
   }
 
   return (
     <>
       <div className="detail-topbar">
         <button className="back-btn" onClick={()=>navigate(-1)}>← Volver</button>
-        {session&&isAdmin(session.user.id)&&<button className="review-action-btn admin" onClick={()=>{setFotoUrl(prof.foto_url||"");setShowEditFotoModal(true);}}>📷 Foto</button>}
+        {session&&isAdmin(session.user.id)&&(
+          <button className="review-action-btn admin" onClick={()=>{setFotoUrl(prof.foto_url||"");setShowEditFotoModal(true);}}>📷 Foto</button>
+        )}
       </div>
 
       <div className="detail-header">
@@ -148,32 +177,105 @@ export default function ProfesorPage() {
       </div>
       {sorted.length===0&&<div className="empty">No hay reseñas que coincidan</div>}
       {sorted.map(r=><ReviewCard key={r.id} r={r}/>)}
-      <button className="add-review-btn" onClick={openReview}>✎ Agregar mi reseña</button>
 
+      <button className="add-review-btn" onClick={openReview}>✎ Agregar mi reseña</button>
+      {!session&&(
+        <p style={{fontSize:12,color:"var(--text3)",textAlign:"center",marginTop:6}}>
+          Necesitás <button className="link-btn" onClick={()=>setShowAuthModal(true)}>iniciar sesión</button> para dejar una reseña.
+        </p>
+      )}
+
+      {showAuthModal&&(
+        <AuthModal onClose={()=>setShowAuthModal(false)} onNeedUsername={()=>{setShowAuthModal(false);setShowUsernameModal(true);}}/>
+      )}
       {showUsernameModal&&<UsernameModal onClose={()=>setShowUsernameModal(false)}/>}
 
-      {showEditFotoModal&&<div className="modal-overlay" onClick={()=>setShowEditFotoModal(false)}><div className="modal" onClick={e=>e.stopPropagation()}>
-        <div className="modal-title">Foto de {prof.nombre}</div>
-        <div className="form-group"><label className="form-label">URL de la foto</label><input value={fotoUrl} onChange={e=>setFotoUrl(e.target.value)} placeholder="https://i.imgur.com/foto.jpg"/>{fotoUrl&&<img src={fotoUrl} alt="preview" className="foto-preview" onError={e=>e.target.style.display="none"}/>}</div>
-        <div className="modal-actions"><button className="btn-cancel" onClick={()=>setShowEditFotoModal(false)}>Cancelar</button><button className="btn-primary" onClick={saveFoto}>Guardar</button></div>
-      </div></div>}
-
-      {showReviewModal&&<div className="modal-overlay" onClick={()=>setShowReviewModal(false)}><div className="modal" onClick={e=>e.stopPropagation()}>
-        <div className="modal-title">Agregar reseña</div>
-        <div className="disclaimer-box">⚠️ {DISCLAIMER}</div>
-        {!session&&<div className="info-box"><strong>Reseña como invitado.</strong></div>}
-        {session&&<div className="info-box success">{isUP(session.user.email)?<>Tu reseña tendrá el badge <span className="badge-up">✓ Alumno UP</span></>:<>Sesión iniciada como {session.user.email}</>}</div>}
-        <div className="form-row">
-          <div className="form-group" style={{flex:1}}><label className="form-label">Materia</label><select value={revMateria} onChange={e=>setRevMateria(e.target.value)}>{(prof.materias||[]).map(m=><option key={m}>{m}</option>)}</select></div>
-          <div className="form-group" style={{flex:1}}><label className="form-label">Modalidad</label><select value={revModalidad} onChange={e=>setRevModalidad(e.target.value)}><option>Presencial</option><option>Online</option></select></div>
+      {showEditFotoModal&&(
+        <div className="modal-overlay" onClick={()=>setShowEditFotoModal(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-title">Foto de {prof.nombre}</div>
+            <div className="form-group">
+              <label className="form-label">URL de la foto</label>
+              <input value={fotoUrl} onChange={e=>setFotoUrl(e.target.value)} placeholder="https://i.imgur.com/foto.jpg"/>
+              {fotoUrl&&<img src={fotoUrl} alt="preview" className="foto-preview" onError={e=>e.target.style.display="none"}/>}
+            </div>
+            <div className="modal-actions">
+              <button className="btn-cancel" onClick={()=>setShowEditFotoModal(false)}>Cancelar</button>
+              <button className="btn-primary" onClick={saveFoto}>Guardar</button>
+            </div>
+          </div>
         </div>
-        {!session&&<div className="form-group"><label className="form-label">Tu email (opcional)</label><input type="email" value={guestEmail} onChange={e=>setGuestEmail(e.target.value)} placeholder="tu@up.edu.ar"/></div>}
-        <div className="form-group"><label className="form-label">Calificación</label><div className="star-picker">{[1,2,3,4,5].map(n=><button key={n} className={`star-btn${selectedStar>=n?" active":""}`} onClick={()=>setSelectedStar(n)}>★</button>)}</div></div>
-        <div className="form-group"><label className="form-label">Tags</label><div className="tag-picker">{ALL_TAGS.map(t=><span key={t} className={`tag-option${selectedTags.includes(t)?" selected":""}`} onClick={()=>setSelectedTags(selectedTags.includes(t)?selectedTags.filter(x=>x!==t):[...selectedTags,t])}>{t}</span>)}</div></div>
-        <div className="preguntas-box"><div className="preguntas-title">💡 Preguntas guía ({revModalidad}):</div><ul className="preguntas-list">{preguntas.map((p,i)=><li key={i}>{p}</li>)}</ul></div>
-        <div className="form-group"><label className="form-label">Tu opinión</label><RichEditor value={revText} onChange={setRevText} placeholder="Contá tu experiencia con este profesor..."/></div>
-        <div className="modal-actions"><button className="btn-cancel" onClick={()=>setShowReviewModal(false)}>Cancelar</button><button className="btn-primary" onClick={submitReview} disabled={submitting}>{submitting?"Guardando...":"Publicar reseña"}</button></div>
-      </div></div>}
+      )}
+
+      {showReviewModal&&(
+        <div className="modal-overlay" onClick={()=>setShowReviewModal(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div className="modal-title">Agregar reseña — {prof.nombre}</div>
+            <div className="disclaimer-box">⚠️ {DISCLAIMER}</div>
+            <div className="info-box success">
+              {isUP(session.user.email)
+                ?<>Tu reseña tendrá el badge <span className="badge-up">✓ Alumno UP</span></>
+                :<>Sesión iniciada como {session.user.email}</>
+              }
+            </div>
+
+            <div className="form-row">
+              <div className="form-group" style={{flex:1}}>
+                <label className="form-label">Materia</label>
+                {!isNewMateria
+                  ?<select value={revMateria} onChange={e=>setRevMateria(e.target.value)}>
+                    {(prof.materias||[]).map(m=><option key={m}>{m}</option>)}
+                  </select>
+                  :<input value={newMateriaInput} onChange={e=>setNewMateriaInput(e.target.value)} placeholder="Nombre de la materia"/>
+                }
+                <button type="button" className="add-materia-btn" onClick={()=>{setIsNewMateria(!isNewMateria);setNewMateriaInput("");}}>
+                  {isNewMateria?"← Elegir de la lista":"+ La materia no está en la lista"}
+                </button>
+              </div>
+              <div className="form-group" style={{flex:1}}>
+                <label className="form-label">Modalidad</label>
+                <select value={revModalidad} onChange={e=>setRevModalidad(e.target.value)}>
+                  <option>Presencial</option>
+                  <option>Online</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Calificación</label>
+              <div className="star-picker">
+                {[1,2,3,4,5].map(n=>(
+                  <button key={n} className={`star-btn${selectedStar>=n?" active":""}`} onClick={()=>setSelectedStar(n)}>★</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Tags</label>
+              <div className="tag-picker">
+                {ALL_TAGS.map(t=>(
+                  <span key={t} className={`tag-option${selectedTags.includes(t)?" selected":""}`} onClick={()=>setSelectedTags(selectedTags.includes(t)?selectedTags.filter(x=>x!==t):[...selectedTags,t])}>{t}</span>
+                ))}
+              </div>
+            </div>
+
+            <div className="preguntas-box">
+              <div className="preguntas-title">💡 Preguntas guía ({revModalidad}):</div>
+              <ul className="preguntas-list">{preguntas.map((p,i)=><li key={i}>{p}</li>)}</ul>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Tu opinión</label>
+              <RichEditor value={revText} onChange={setRevText} placeholder="Contá tu experiencia con este profesor..."/>
+            </div>
+
+            <div className="modal-actions">
+              <button className="btn-cancel" onClick={()=>setShowReviewModal(false)}>Cancelar</button>
+              <button className="btn-primary" onClick={submitReview} disabled={submitting}>{submitting?"Guardando...":"Publicar reseña"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
