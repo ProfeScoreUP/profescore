@@ -1,152 +1,222 @@
 import { useNavigate } from "react-router-dom";
-import { useApp, CATEGORIA_COLORS, timeAgo, avgRating, ratingPillClass } from "../context";
+import { useApp, CATEGORIA_COLORS, timeAgo, avgRating, ratingPillClass, initials, colorFor, COLORS } from "../context";
 import { RichDisplay } from "../RichEditor";
+
+function Avatar({ name, size = 36 }) {
+  const c = colorFor((name || "").charCodeAt(0) % COLORS.length);
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: "50%",
+      background: c.bg, color: c.color,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontWeight: 600, fontSize: size * 0.35, flexShrink: 0,
+    }}>
+      {initials(name)}
+    </div>
+  );
+}
 
 export default function HomePage() {
   const { session, perfil, profesores, resenas, hilos, respuestas, mensajes, perfilesMap, unreadCount } = useApp();
   const navigate = useNavigate();
 
-  const allRevenas = Object.values(resenas).flat();
-  const ultimasResenas = allRevenas.slice(0, 4);
+  const allResenas = Object.values(resenas).flat();
+  const ultimasResenas = allResenas.slice(0, 4);
   const ultimosHilos = hilos.slice(0, 4);
-  const conversations = getConversations();
-
-  function getConversations() {
-    if(!session) return [];
-    const convMap = {};
-    mensajes.forEach(m=>{
-      const otherId = m.de_user_id===session.user.id?m.para_user_id:m.de_user_id;
-      if(!convMap[otherId]||new Date(m.created_at)>new Date(convMap[otherId].lastMsg.created_at)) convMap[otherId]={otherId,lastMsg:m,unread:0};
-      if(m.para_user_id===session.user.id&&!m.leido) convMap[otherId].unread=(convMap[otherId].unread||0)+1;
-    });
-    return Object.values(convMap).filter(c=>c.unread>0).sort((a,b)=>new Date(b.lastMsg.created_at)-new Date(a.lastMsg.created_at)).slice(0,3);
-  }
 
   const totalProfs = profesores.length;
-  const totalResenas = allRevenas.length;
+  const totalResenas = allResenas.length;
   const totalUsuarios = Object.keys(perfilesMap).length;
 
+  const profesoresDestacados = [...profesores]
+    .filter(p => (resenas[p.id] || []).length > 0)
+    .sort((a, b) => avgRating(resenas[b.id] || []) - avgRating(resenas[a.id] || []))
+    .slice(0, 3);
+
+  function getConversations() {
+    if (!session) return [];
+    const convMap = {};
+    mensajes.forEach(m => {
+      const otherId = m.de_user_id === session.user.id ? m.para_user_id : m.de_user_id;
+      if (!convMap[otherId] || new Date(m.created_at) > new Date(convMap[otherId].lastMsg.created_at))
+        convMap[otherId] = { otherId, lastMsg: m, unread: 0 };
+      if (m.para_user_id === session.user.id && !m.leido)
+        convMap[otherId].unread = (convMap[otherId].unread || 0) + 1;
+    });
+    return Object.values(convMap)
+      .sort((a, b) => new Date(b.lastMsg.created_at) - new Date(a.lastMsg.created_at))
+      .slice(0, 3);
+  }
+
+  const conversations = getConversations();
+
+  const acciones = [
+    { icon: "🔍", title: "Buscar profesor", path: "/profesores" },
+    { icon: "✍️", title: "Dejar una reseña", path: "/profesores" },
+    { icon: "📚", title: "Ver materias", path: "/materias" },
+    { icon: "💬", title: "Ir al foro", path: "/foro" },
+    { icon: "✉️", title: "Mis mensajes", path: "/mensajes", badge: unreadCount > 0 ? unreadCount : null },
+    { icon: "👥", title: "Comunidad", path: "/comunidad" },
+  ];
+
+  const starsStr = (r) => "★".repeat(Math.round(r)) + "☆".repeat(5 - Math.round(r));
+
   return (
-    <div style={{maxWidth:700}}>
+    <div style={{ maxWidth: 700, display: "flex", flexDirection: "column", gap: "1.25rem", paddingBottom: "2rem" }}>
+
       {/* HERO */}
-      <div className="home-hero">
-        <div className="home-hero-text">
-          <h1 className="home-title">Bienvenido a <span style={{color:"var(--accent)"}}>ProfeScore</span></h1>
-          <p className="home-subtitle">La plataforma de estudiantes de la Universidad de Palermo para compartir experiencias reales sobre profesores, conectar con compañeros y tomar mejores decisiones al inscribirte.</p>
-          {!session&&<div style={{display:"flex",gap:8,marginTop:"1rem",flexWrap:"wrap"}}>
-            <button className="btn-primary" style={{flex:"none",padding:"10px 24px"}} onClick={()=>navigate("/acerca")}>Conocer más</button>
-          </div>}
-          {session&&perfil&&<p style={{fontSize:13,color:"var(--text3)",marginTop:"0.75rem"}}>Hola, <strong style={{color:"var(--accent)"}}>@{perfil.username}</strong> 👋</p>}
+      <div className="dash-hero">
+        <div>
+          <h1 style={{ fontSize: 18, fontWeight: 500, color: "var(--text)", marginBottom: 2 }}>
+            {session && perfil ? <>Bienvenido, <span style={{ color: "var(--accent)" }}>@{perfil.username}</span></> : "Bienvenido a ProfeScore"}
+          </h1>
+          <p style={{ fontSize: 13, color: "var(--text3)", marginBottom: "1rem" }}>
+            Universidad de Palermo · ProfeScore
+          </p>
         </div>
-      </div>
-
-      {/* STATS */}
-      <div className="home-stats">
-        {[[totalProfs,"Profesores","👨‍🏫"],[totalResenas,"Reseñas","⭐"],[totalUsuarios,"Estudiantes","👥"]].map(([n,l,icon])=>(
-          <div key={l} className="home-stat-card">
-            <div className="home-stat-icon">{icon}</div>
-            <div className="home-stat-num">{n}</div>
-            <div className="home-stat-lbl">{l}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* ACCESOS RÁPIDOS */}
-      <div className="home-section-title">¿Qué querés hacer?</div>
-      <div className="home-actions">
-        {[
-          {icon:"🔍",title:"Buscar profesor",desc:"Encontrá reseñas de tus profesores",path:"/profesores",color:"#E1F5EE",textColor:"#085041"},
-          {icon:"📚",title:"Ver materias",desc:"Explorá por materia y encontrá los mejores profesores",path:"/materias",color:"#E6F1FB",textColor:"#0C447C"},
-          {icon:"✍️",title:"Dejar una reseña",desc:"Compartí tu experiencia con tus compañeros",path:"/profesores",color:"#FAEEDA",textColor:"#633806"},
-          {icon:"💬",title:"Ir al foro",desc:"Participá en discusiones con otros estudiantes",path:"/foro",color:"#EEEDFE",textColor:"#3C3489"},
-          {icon:"👥",title:"Comunidad",desc:"Conocé otros estudiantes de la UP",path:"/comunidad",color:"#FBEAF0",textColor:"#72243E"},
-          {icon:"✉️",title:"Mis mensajes",desc:`${unreadCount>0?`${unreadCount} mensajes sin leer`:"Chateá con otros estudiantes"}`,path:"/mensajes",color:"#FAECE7",textColor:"#712B13"},
-        ].map(a=>(
-          <div key={a.title} className="home-action-card" style={{background:a.color,borderColor:a.color}} onClick={()=>navigate(a.path)}>
-            <div className="home-action-icon">{a.icon}</div>
-            <div className="home-action-title" style={{color:a.textColor}}>{a.title}</div>
-            <div className="home-action-desc">{a.desc}</div>
-            {a.path==="/mensajes"&&unreadCount>0&&<span className="sidebar-badge" style={{marginTop:6,alignSelf:"flex-start"}}>{unreadCount}</span>}
-          </div>
-        ))}
-      </div>
-
-      {/* MENSAJES NO LEIDOS */}
-      {session&&conversations.length>0&&<>
-        <div className="home-section-title" style={{marginTop:"1.5rem"}}>✉️ Mensajes sin leer</div>
-        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:"1.5rem"}}>
-          {conversations.map(conv=>{
-            const op = perfilesMap[conv.otherId]||{username:"Usuario",foto_url:null};
-            return(
-              <div key={conv.otherId} className="conversation-item unread" onClick={()=>navigate(`/mensajes/${conv.otherId}`)}>
-                <div style={{width:36,height:36,borderRadius:"50%",background:"var(--accent-bg)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,color:"var(--accent-dark)",flexShrink:0}}>{(op.username||"?")[0].toUpperCase()}</div>
-                <div className="conv-info"><div className="conv-username">@{op.username}</div><div className="conv-preview">{conv.lastMsg.texto}</div></div>
-                <span className="sidebar-badge">{conv.unread}</span>
-              </div>
-            );
-          })}
-        </div>
-      </>}
-
-      {/* ÚLTIMOS HILOS */}
-      {ultimosHilos.length>0&&<>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"0.75rem",marginTop:"1.5rem"}}>
-          <div className="home-section-title" style={{margin:0}}>💬 Últimas discusiones en el foro</div>
-          <button className="link-btn" onClick={()=>navigate("/foro")}>Ver todo →</button>
-        </div>
-        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:"1.5rem"}}>
-          {ultimosHilos.map(h=>(
-            <div key={h.id} className="hilo-card" onClick={()=>navigate(`/foro/${h.id}`)}>
-              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}>
-                    <span className="cat-badge" style={{background:CATEGORIA_COLORS[h.categoria]?.bg,color:CATEGORIA_COLORS[h.categoria]?.color}}>{h.categoria}</span>
-                  </div>
-                  <div className="hilo-titulo" style={{fontSize:14}}>{h.titulo}</div>
-                  <div style={{fontSize:12,color:"var(--text3)",marginTop:3}}>por <span style={{color:"var(--accent)"}}>@{h.username}</span> · {timeAgo(h.created_at)}</div>
-                </div>
-                <div style={{textAlign:"right",flexShrink:0}}>
-                  <div style={{fontSize:16,fontWeight:700,color:"var(--text)"}}>{(respuestas[h.id]||[]).length}</div>
-                  <div style={{fontSize:11,color:"var(--text4)"}}>resp.</div>
-                </div>
+        <div className="dash-stats">
+          {[
+            { icon: "👨‍🏫", val: totalProfs, lbl: "Profesores" },
+            { icon: "⭐", val: totalResenas, lbl: "Reseñas" },
+            { icon: "👥", val: totalUsuarios, lbl: "Estudiantes" },
+          ].map(({ icon, val, lbl }) => (
+            <div key={lbl} className="dash-stat">
+              <span style={{ fontSize: 20 }}>{icon}</span>
+              <div>
+                <div style={{ fontSize: 20, fontWeight: 500, color: "var(--text)", lineHeight: 1 }}>{val}</div>
+                <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2 }}>{lbl}</div>
               </div>
             </div>
           ))}
         </div>
-      </>}
+      </div>
 
-      {/* ÚLTIMAS RESEÑAS */}
-      {ultimasResenas.length>0&&<>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"0.75rem",marginTop:"0.5rem"}}>
-          <div className="home-section-title" style={{margin:0}}>⭐ Últimas reseñas</div>
-          <button className="link-btn" onClick={()=>navigate("/profesores")}>Ver profesores →</button>
-        </div>
-        <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {ultimasResenas.map(r=>{
-            const prof = profesores.find(p=>p.id===r.profesor_id);
-            const profRevs = resenas[r.profesor_id]||[];
-            const avg = avgRating(profRevs);
-            if(!prof) return null;
-            return(
-              <div key={r.id} className="review-card" style={{cursor:"pointer"}} onClick={()=>navigate(`/profesor/${r.profesor_id}`)}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-                  <div>
-                    <div style={{fontWeight:600,fontSize:14,color:"var(--text)"}}>{prof.nombre}</div>
-                    <div style={{fontSize:12,color:"var(--text3)"}}>{r.materia} · <span style={{color:"var(--accent)"}}>@{r.username||"Invitado"}</span> · {timeAgo(r.created_at)}</div>
+      {/* ACCIONES RÁPIDAS */}
+      <div className="dash-actions">
+        {acciones.map(a => (
+          <div key={a.title} className="dash-action-btn" onClick={() => navigate(a.path)}>
+            <span style={{ fontSize: 18 }}>{a.icon}</span>
+            <span style={{ fontSize: 12, color: "var(--text)", fontWeight: 500, textAlign: "center", lineHeight: 1.3 }}>{a.title}</span>
+            {a.badge && <span className="sidebar-badge" style={{ position: "absolute", top: 6, right: 6, fontSize: 10, padding: "1px 5px" }}>{a.badge}</span>}
+          </div>
+        ))}
+      </div>
+
+      {/* DOS COLUMNAS: RESEÑAS + PROFESORES */}
+      <div className="dash-two-col">
+
+        {/* ÚLTIMAS RESEÑAS */}
+        <div className="dash-card">
+          <div className="dash-card-header">
+            <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>⭐ Últimas reseñas</span>
+            <button className="link-btn" onClick={() => navigate("/profesores")}>Ver todo →</button>
+          </div>
+          {ultimasResenas.length === 0 && <p style={{ padding: "1rem", fontSize: 13, color: "var(--text3)" }}>Aún no hay reseñas.</p>}
+          {ultimasResenas.map(r => {
+            const prof = profesores.find(p => p.id === r.profesor_id);
+            if (!prof) return null;
+            return (
+              <div key={r.id} className="dash-list-item" onClick={() => navigate(`/profesor/${r.profesor_id}`)}>
+                <Avatar name={prof.nombre} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{prof.nombre}</span>
+                    <span className={`rating-pill ${ratingPillClass(r.rating)}`} style={{ fontSize: 11, padding: "1px 7px" }}>{r.rating}</span>
                   </div>
-                  <div className={`rating-pill ${ratingPillClass(r.rating)}`} style={{padding:"4px 10px"}}>
-                    <span style={{fontSize:16,fontWeight:700}}>{r.rating}</span>
+                  <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 3 }}>{r.materia}</div>
+                  <div style={{ fontSize: 12, color: "var(--text2)", overflow: "hidden", maxHeight: 36, lineHeight: 1.5 }}>
+                    <RichDisplay html={r.texto} />
                   </div>
+                  {(r.tags || []).length > 0 && (
+                    <div style={{ display: "flex", gap: 4, marginTop: 5, flexWrap: "wrap" }}>
+                      {r.tags.slice(0, 2).map(t => <span key={t} className="tag tag-green" style={{ fontSize: 10, padding: "1px 6px" }}>{t}</span>)}
+                    </div>
+                  )}
                 </div>
-                <div style={{fontSize:13,color:"var(--text2)",lineHeight:1.5,overflow:"hidden",maxHeight:48,textOverflow:"ellipsis"}}>
-                  <RichDisplay html={r.texto}/>
-                </div>
-                {(r.tags||[]).length>0&&<div className="tags" style={{marginTop:6}}>{r.tags.slice(0,3).map(t=><span key={t} className="tag tag-green">{t}</span>)}</div>}
               </div>
             );
           })}
         </div>
-      </>}
+
+        {/* PROFESORES DESTACADOS */}
+        <div className="dash-card">
+          <div className="dash-card-header">
+            <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>🏆 Profesores destacados</span>
+            <button className="link-btn" onClick={() => navigate("/profesores")}>Ver todo →</button>
+          </div>
+          {profesoresDestacados.length === 0 && <p style={{ padding: "1rem", fontSize: 13, color: "var(--text3)" }}>Aún no hay datos.</p>}
+          {profesoresDestacados.map(p => {
+            const avg = avgRating(resenas[p.id] || []);
+            return (
+              <div key={p.id} className="dash-list-item" onClick={() => navigate(`/profesor/${p.id}`)}>
+                <Avatar name={p.nombre} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{p.nombre}</div>
+                  <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 1 }}>{(resenas[p.id] || []).length} reseña{(resenas[p.id] || []).length !== 1 ? "s" : ""}</div>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ fontSize: 13, color: "var(--accent)", letterSpacing: 1 }}>{starsStr(avg)}</div>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: "var(--text)", marginTop: 1 }}>{avg.toFixed(1)}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* DOS COLUMNAS: FORO + MENSAJES */}
+      <div className="dash-two-col">
+
+        {/* HILOS DEL FORO */}
+        <div className="dash-card">
+          <div className="dash-card-header">
+            <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>💬 Hilos del foro</span>
+            <button className="link-btn" onClick={() => navigate("/foro")}>Ver todo →</button>
+          </div>
+          {ultimosHilos.length === 0 && <p style={{ padding: "1rem", fontSize: 13, color: "var(--text3)" }}>No hay hilos aún.</p>}
+          {ultimosHilos.map(h => (
+            <div key={h.id} className="dash-list-item" onClick={() => navigate(`/foro/${h.id}`)}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span className="cat-badge" style={{ background: CATEGORIA_COLORS[h.categoria]?.bg, color: CATEGORIA_COLORS[h.categoria]?.color, fontSize: 10, padding: "1px 7px", marginBottom: 4, display: "inline-block" }}>{h.categoria}</span>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{h.titulo}</div>
+                <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2 }}>@{h.username} · {timeAgo(h.created_at)}</div>
+              </div>
+              <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
+                <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>{(respuestas[h.id] || []).length}</div>
+                <div style={{ fontSize: 10, color: "var(--text4)" }}>resp.</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* MENSAJES */}
+        <div className="dash-card">
+          <div className="dash-card-header">
+            <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
+              ✉️ Mensajes {unreadCount > 0 && <span className="sidebar-badge" style={{ fontSize: 10, padding: "1px 6px", marginLeft: 4 }}>{unreadCount}</span>}
+            </span>
+            <button className="link-btn" onClick={() => navigate("/mensajes")}>Ver todo →</button>
+          </div>
+          {!session && <p style={{ padding: "1rem", fontSize: 13, color: "var(--text3)" }}>Iniciá sesión para ver tus mensajes.</p>}
+          {session && conversations.length === 0 && <p style={{ padding: "1rem", fontSize: 13, color: "var(--text3)" }}>No hay mensajes aún.</p>}
+          {session && conversations.map(conv => {
+            const op = perfilesMap[conv.otherId] || { username: "Usuario" };
+            const hasUnread = conv.unread > 0;
+            return (
+              <div key={conv.otherId} className="dash-list-item" onClick={() => navigate(`/mensajes/${conv.otherId}`)}>
+                {hasUnread && <div style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--accent)", flexShrink: 0 }} />}
+                <Avatar name={op.username} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: hasUnread ? 600 : 400, color: "var(--text)" }}>@{op.username}</div>
+                  <div style={{ fontSize: 12, color: "var(--text3)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 1 }}>{conv.lastMsg.texto}</div>
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text3)", flexShrink: 0, marginLeft: 8 }}>{timeAgo(conv.lastMsg.created_at)}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
     </div>
   );
 }
