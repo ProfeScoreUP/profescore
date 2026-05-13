@@ -782,7 +782,10 @@ export default function App(){
               <div className="profile-header">
                 <div className="profile-avatar">{viewingUser.foto_url?<img src={viewingUser.foto_url} alt={viewingUser.username}/>:initials(viewingUser.username||"?")}</div>
                 <div style={{flex:1}}>
-                  <div className="profile-username">@{viewingUser.username}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+  <div className="profile-username">@{viewingUser.username}</div>
+  {allRevenas.some(r=>r.user_id===viewingUser.id&&r.verified)&&<span className="badge-up">✓ Alumno UP</span>}
+</div>
                   {viewingUser.carrera&&<div className="profile-carrera">{viewingUser.carrera}</div>}
                   {viewingUser.descripcion&&<div className="profile-descripcion">{viewingUser.descripcion}</div>}
                   <div className="profile-stats" style={{marginTop:8}}>
