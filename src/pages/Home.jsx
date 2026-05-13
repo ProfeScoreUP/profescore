@@ -20,12 +20,6 @@ function Avatar({ name, url, size = 36 }) {
   );
 }
 
-const LINKS_UP = [
-  { icon: "🎓", title: "Campus Virtual", url: "https://campus.palermo.edu/" },
-  { icon: "📱", title: "MyUP", url: "https://myup.palermo.edu/" },
-  { icon: "💼", title: "Office 365", url: "https://www.office.com/" },
-];
-
 export default function HomePage() {
   const { session, perfil, profesores, resenas, hilos, respuestas, mensajes, perfilesMap, unreadCount } = useApp();
   const navigate = useNavigate();
@@ -251,34 +245,6 @@ export default function HomePage() {
               </div>
             );
           })}
-        </div>
-      </div>
-
-      {/* LINKS UNIVERSIDAD */}
-      <div className="dash-card">
-        <div className="dash-card-header">
-          <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>🏛️ Links de la universidad</span>
-        </div>
-        <div style={{ display: "flex", gap: 0 }}>
-          {LINKS_UP.map((l, i) => (
-            <a
-              key={l.title}
-              href={l.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
-                padding: "14px 10px", textDecoration: "none",
-                borderRight: i < LINKS_UP.length - 1 ? "1px solid var(--border2)" : "none",
-                transition: "background 0.12s",
-              }}
-              onMouseEnter={e=>e.currentTarget.style.background="var(--surface2)"}
-              onMouseLeave={e=>e.currentTarget.style.background="transparent"}
-            >
-              <span style={{ fontSize: 22 }}>{l.icon}</span>
-              <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text)", textAlign: "center" }}>{l.title}</span>
-            </a>
-          ))}
         </div>
       </div>
 
