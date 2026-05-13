@@ -20,8 +20,116 @@ function Avatar({ name, url, size = 36 }) {
   );
 }
 
+function BusquedaGlobal({ profesores, materias, hilos, resenas, navigate }) {
+  const [query, setQuery] = useState("");
+
+  const q = query.toLowerCase().trim();
+
+  const profResults = q.length < 2 ? [] : profesores.filter(p =>
+    p.nombre.toLowerCase().includes(q) ||
+    (p.materias||[]).some(m=>m.toLowerCase().includes(q)) ||
+    p.departamento.toLowerCase().includes(q)
+  ).slice(0, 4);
+
+  const matResults = q.length < 2 ? [] : materias.filter(m =>
+    m.nombre.toLowerCase().includes(q)
+  ).slice(0, 4);
+
+  const hiloResults = q.length < 2 ? [] : hilos.filter(h =>
+    h.titulo.toLowerCase().includes(q) ||
+    h.contenido.toLowerCase().includes(q)
+  ).slice(0, 3);
+
+  const hasResults = profResults.length > 0 || matResults.length > 0 || hiloResults.length > 0;
+  const showDropdown = q.length >= 2;
+
+  return (
+    <div style={{position:"relative"}}>
+      <div style={{position:"relative"}}>
+        <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:16,color:"var(--text3)"}}>🔍</span>
+        <input
+          value={query}
+          onChange={e=>setQuery(e.target.value)}
+          placeholder="Buscar profesor, materia o tema del foro..."
+          style={{
+            width:"100%", padding:"10px 12px 10px 36px",
+            border:"1px solid var(--border)", borderRadius:10,
+            fontSize:14, background:"var(--surface)", color:"var(--text)",
+            fontFamily:"var(--font)", outline:"none", boxSizing:"border-box",
+            transition:"border-color 0.12s",
+          }}
+          onFocus={e=>e.target.style.borderColor="var(--accent)"}
+          onBlur={e=>e.target.style.borderColor="var(--border)"}
+        />
+        {query && (
+          <button onClick={()=>setQuery("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:16,color:"var(--text3)"}}>✕</button>
+        )}
+      </div>
+
+      {showDropdown && (
+        <div style={{
+          position:"absolute", top:"calc(100% + 6px)", left:0, right:0,
+          background:"var(--surface)", border:"1px solid var(--border)",
+          borderRadius:10, zIndex:50, overflow:"hidden",
+          boxShadow:"0 4px 20px rgba(0,0,0,0.1)",
+        }}>
+          {!hasResults && (
+            <div style={{padding:"1rem",fontSize:13,color:"var(--text3)",textAlign:"center"}}>Sin resultados para "{query}"</div>
+          )}
+
+          {profResults.length > 0 && (
+            <>
+              <div style={{padding:"8px 14px 4px",fontSize:11,fontWeight:600,color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.05em"}}>Profesores</div>
+              {profResults.map(p => {
+                const avg = avgRating(resenas[p.id]||[]);
+                return (
+                  <div key={p.id} onClick={()=>{navigate(`/profesor/${p.id}`);setQuery("");}} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",cursor:"pointer",transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background="var(--surface2)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <Avatar name={p.nombre} size={30}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:500,color:"var(--text)"}}>{p.nombre}</div>
+                      <div style={{fontSize:11,color:"var(--text3)"}}>{p.departamento}</div>
+                    </div>
+                    {avg>0&&<span style={{fontSize:12,color:"var(--accent)",fontWeight:500}}>★ {avg.toFixed(1)}</span>}
+                  </div>
+                );
+              })}
+            </>
+          )}
+
+          {matResults.length > 0 && (
+            <>
+              <div style={{padding:"8px 14px 4px",fontSize:11,fontWeight:600,color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.05em",borderTop:profResults.length>0?"1px solid var(--border2)":"none"}}>Materias</div>
+              {matResults.map(m => (
+                <div key={m.id} onClick={()=>{navigate(`/profesores?materia=${encodeURIComponent(m.nombre)}`);setQuery("");}} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",cursor:"pointer",transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background="var(--surface2)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <span style={{fontSize:18}}>📚</span>
+                  <div style={{fontSize:13,color:"var(--text)"}}>{m.nombre}</div>
+                </div>
+              ))}
+            </>
+          )}
+
+          {hiloResults.length > 0 && (
+            <>
+              <div style={{padding:"8px 14px 4px",fontSize:11,fontWeight:600,color:"var(--text4)",textTransform:"uppercase",letterSpacing:"0.05em",borderTop:(profResults.length>0||matResults.length>0)?"1px solid var(--border2)":"none"}}>Foro</div>
+              {hiloResults.map(h => (
+                <div key={h.id} onClick={()=>{navigate(`/foro/${h.id}`);setQuery("");}} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",cursor:"pointer",transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background="var(--surface2)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <span style={{fontSize:18}}>💬</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,color:"var(--text)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{h.titulo}</div>
+                    <div style={{fontSize:11,color:"var(--text3)"}}>@{h.username} · {timeAgo(h.created_at)}</div>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function HomePage() {
-  const { session, perfil, profesores, resenas, hilos, respuestas, mensajes, perfilesMap, unreadCount } = useApp();
+  const { session, perfil, profesores, resenas, materias, hilos, respuestas, mensajes, perfilesMap, unreadCount } = useApp();
   const navigate = useNavigate();
   const [showAuth, setShowAuth] = useState(false);
   const [showUsername, setShowUsername] = useState(false);
@@ -83,14 +191,8 @@ export default function HomePage() {
               Universidad de Palermo · ProfeScore
             </p>
           </div>
-
-          {/* Avatar o botón login */}
           {session && perfil ? (
-            <div
-              style={{ cursor: "pointer", flexShrink: 0 }}
-              onClick={() => navigate(`/perfil/${session.user.id}`)}
-              title="Ver mi perfil"
-            >
+            <div style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => navigate(`/perfil/${session.user.id}`)} title="Ver mi perfil">
               <Avatar name={perfil.username} url={perfil.foto_url} size={42} />
             </div>
           ) : (
@@ -117,6 +219,9 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* BÚSQUEDA GLOBAL */}
+      <BusquedaGlobal profesores={profesores} materias={materias} hilos={hilos} resenas={resenas} navigate={navigate}/>
+
       {/* ACCIONES RÁPIDAS */}
       <div className="dash-actions">
         {acciones.map(a => (
@@ -130,8 +235,6 @@ export default function HomePage() {
 
       {/* DOS COLUMNAS: RESEÑAS + PROFESORES */}
       <div className="dash-two-col">
-
-        {/* ÚLTIMAS RESEÑAS */}
         <div className="dash-card">
           <div className="dash-card-header">
             <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>⭐ Últimas reseñas</span>
@@ -164,7 +267,6 @@ export default function HomePage() {
           })}
         </div>
 
-        {/* PROFESORES DESTACADOS */}
         <div className="dash-card">
           <div className="dash-card-header">
             <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>🏆 Profesores destacados</span>
@@ -192,8 +294,6 @@ export default function HomePage() {
 
       {/* DOS COLUMNAS: FORO + MENSAJES */}
       <div className="dash-two-col">
-
-        {/* HILOS DEL FORO */}
         <div className="dash-card">
           <div className="dash-card-header">
             <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>💬 Hilos del foro</span>
@@ -215,7 +315,6 @@ export default function HomePage() {
           ))}
         </div>
 
-        {/* MENSAJES */}
         <div className="dash-card">
           <div className="dash-card-header">
             <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
